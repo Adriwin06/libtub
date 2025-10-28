@@ -22,9 +22,9 @@ inline unsigned long BitScanReverse(unsigned long input)
 #if defined(_MSC_VER)
 	_BitScanReverse(&result, input);
 #elif __has_builtin(__builtin_clzl) || defined(__GNUC__)
-	result = static_cast<unsigned long>(31 - __builtin_clzl(input));
+	result = static_cast<unsigned long>(std::numeric_limits<unsigned long>::digits - 1 - __builtin_clzl(input));
 #else
-#	error "Unsupported compiler."
+	result = std::bit_width(input | 1U) - 1;
 #endif
 
 	return result;
