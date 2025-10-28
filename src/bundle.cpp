@@ -816,7 +816,7 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 
 uint32_t Bundle::HashResourceName(std::string resourceName) const
 {
-	std::transform(resourceName.begin(), resourceName.end(), resourceName.begin(), tolower);
+	std::transform(resourceName.begin(), resourceName.end(), resourceName.begin(), [](auto c) { return std::tolower(c, std::locale::classic()); });
 	return crc32_z(0, reinterpret_cast<const Bytef *>(resourceName.c_str()), resourceName.length());
 }
 
