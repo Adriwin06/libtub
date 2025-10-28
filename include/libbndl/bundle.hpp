@@ -164,7 +164,7 @@ namespace libbndl
 			uint32_t uncompressedSize;
 			uint32_t uncompressedAlignment; // default depending on file type
 			uint32_t compressedSize;
-			std::unique_ptr<std::vector<uint8_t>> data;
+			std::unique_ptr<uint8_t[]> data;
 		};
 
 		struct EntryDebugInfo

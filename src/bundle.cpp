@@ -142,9 +142,7 @@ bool Bundle::LoadBND2(binaryio::BinaryReader &reader)
 				continue;
 			}
 
-			const auto readBuffer = dataReader.Read<uint8_t *>(readSize);
-			dataInfo.data = std::make_unique<std::vector<uint8_t>>(readBuffer, readBuffer + readSize);
-			delete[] readBuffer;
+			dataInfo.data = std::unique_ptr<uint8_t[]>(dataReader.Read<uint8_t *>(readSize));
 		}
 
 		e.info.dependenciesOffset = reader.Read<uint32_t>();
@@ -325,9 +323,7 @@ bool Bundle::LoadBNDL(binaryio::BinaryReader &reader)
 
 			dataReader.Seek(readOffset); // Read offset
 
-			const auto readBuffer = dataReader.Read<uint8_t *>(readSize);
-			dataInfo.data = std::make_unique<std::vector<uint8_t>>(readBuffer, readBuffer + readSize);
-			delete[] readBuffer;
+			dataInfo.data = std::unique_ptr<uint8_t[]>(dataReader.Read<uint8_t *>(readSize));
 		}
 
 		reader.Seek(0x4 * blocks, std::ios::cur); // memory address stuff
@@ -562,7 +558,7 @@ bool Bundle::SaveBND2(binaryio::BinaryWriter &writer)
 			if (readSize > 0)
 			{
 				writer.VisitAndWrite<uint32_t>(entryDataPointerPos[j][i], writer.GetOffset32() - blockStart);
-				writer.Write(dataInfo.data->data(), readSize);
+				writer.Write(dataInfo.data.get(), readSize);
 				writer.Align((i != 0 && j != m_entries.size() - 1) ? 0x80 : 16);
 			}
 
@@ -679,12 +675,16 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 		debugDataWriter.Write(static_cast<uint32_t>(outStr.size()));
 		debugDataWriter.Write(outStr);
 
-		const auto data = debugDataWriter.GetStream().str();
+		const auto data = debugDataWriter.GetStream().view();
+		const auto dataSize = data.size();
 
 		auto &e = m_entries[0xFFFFFFFF]; // HACK
 		e.info.resourceType = TextFile;
-		e.fileBlockData[0].data = std::make_unique<std::vector<uint8_t>>(data.begin(), data.end());
-		e.fileBlockData[0].uncompressedSize = static_cast<uint32_t>(data.size());
+
+		e.fileBlockData[0].data = std::make_unique_for_overwrite<uint8_t[]>(dataSize);
+		std::memcpy(e.fileBlockData[0].data.get(), data.data(), dataSize);
+
+		e.fileBlockData[0].uncompressedSize = static_cast<uint32_t>(dataSize);
 		e.fileBlockData[0].uncompressedAlignment = 4;
 	}
 
@@ -799,7 +799,7 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 			if (readSize > 0)
 			{
 				writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first).dataBlockPointerPos[i], writer.GetOffset32() - blockStartOffset);
-				writer.Write(dataInfo.data->data(), readSize);
+				writer.Write(dataInfo.data.get(), readSize);
 			}
 		}
 
@@ -896,14 +896,14 @@ std::unique_ptr<std::vector<uint8_t>> Bundle::GetBinary(uint32_t resourceID, uin
 		assert(m_flags & Compressed);
 
 		uLongf uncompressedSizeLong = uncompressedSize;
-		const auto ret = uncompress(uncompressedBuffer->data(), &uncompressedSizeLong, buffer->data(), static_cast<uLong>(dataInfo.compressedSize));
+		const auto ret = uncompress(uncompressedBuffer->data(), &uncompressedSizeLong, buffer.get(), static_cast<uLong>(dataInfo.compressedSize));
 
 		assert(ret == Z_OK);
 		assert(uncompressedSize == uncompressedSizeLong);
 	}
 	else
 	{
-		std::memcpy(uncompressedBuffer->data(), buffer->data(), uncompressedSize);
+		std::memcpy(uncompressedBuffer->data(), buffer.get(), uncompressedSize);
 	}
 
 	return uncompressedBuffer;
@@ -1002,8 +1002,9 @@ bool Bundle::ReplaceResource(uint32_t resourceID, const EntryData &data)
 			continue;
 		}
 
-		std::unique_ptr<std::vector<uint8_t>> inBuffer;
-		std::unique_ptr<std::vector<uint8_t>> outBuffer;
+		std::unique_ptr<uint8_t[]> inBuffer;
+		size_t inSize;
+		std::unique_ptr<uint8_t[]> outBuffer;
 
 		if (m_magicVersion == BND2 && i == 0 && !data.dependencies.empty())
 		{
@@ -1016,29 +1017,32 @@ bool Bundle::ReplaceResource(uint32_t resourceID, const EntryData &data)
 			const auto depSize = writer.GetSize();
 			auto depStream = writer.GetStream();
 
-			const auto inSize = inDataInfo->size();
-			binaryio::Align(inSize, 16);
-			inBuffer = std::make_unique<std::vector<uint8_t>>(inSize + depSize);
-			inBuffer->assign(inDataInfo->begin(), inDataInfo->end());
-			inBuffer->resize(inSize);
-			inBuffer->insert(inBuffer->end(), std::istreambuf_iterator<char>(depStream), std::istreambuf_iterator<char>());
+			const auto inDataInfoSize = inDataInfo->size();
+			binaryio::Align(inDataInfoSize, 16);
+
+			inSize = inDataInfoSize + depSize;
+			inBuffer = std::make_unique_for_overwrite<uint8_t[]>(inSize);
+			std::memcpy(inBuffer.get(), inDataInfo->data(), inDataInfoSize);
+			std::memcpy(inBuffer.get() + inDataInfoSize, depStream.view().data(), depSize);
 
 			e.info.dependenciesOffset = static_cast<uint32_t>(inSize);
 			e.info.numberOfDependencies = static_cast<uint16_t>(data.dependencies.size());
 		}
 		else
 		{
-			inBuffer = std::make_unique<std::vector<uint8_t>>(inDataInfo->begin(), inDataInfo->end());
+			inSize = inDataInfo->size();
+			inBuffer = std::make_unique_for_overwrite<uint8_t[]>(inSize);
+			std::memcpy(inBuffer.get(), inDataInfo->data(), inSize);
 		}
 
-		const auto uncompressedSize = static_cast<uint32_t>(inBuffer->size());
+		const auto uncompressedSize = static_cast<uint32_t>(inSize);
 
 		if (m_flags & Compressed)
 		{
-			const auto compBufferSize = compressBound(static_cast<uLong>(inBuffer->size()));
-			outBuffer = std::make_unique<std::vector<uint8_t>>(compBufferSize);
+			const auto compBufferSize = compressBound(static_cast<uLong>(inSize));
+			std::vector<uint8_t> compBuffer(compBufferSize);
 			uLongf actualSize = compBufferSize;
-			const auto ret = compress2(outBuffer->data(), &actualSize, inBuffer->data(), static_cast<uLong>(inBuffer->size()), Z_BEST_COMPRESSION);
+			const auto ret = compress2(compBuffer.data(), &actualSize, inBuffer.get(), static_cast<uLong>(inSize), Z_BEST_COMPRESSION);
 
 			if (ret != Z_OK)
 			{
@@ -1046,7 +1050,9 @@ bool Bundle::ReplaceResource(uint32_t resourceID, const EntryData &data)
 				return false;
 			}
 
-			outBuffer->shrink_to_fit();
+			outBuffer = std::make_unique_for_overwrite<uint8_t[]>(actualSize);
+			std::memcpy(outBuffer.get(), compBuffer.data(), actualSize);
+
 			outDataInfo.compressedSize = actualSize;
 		}
 		else
