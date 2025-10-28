@@ -15,7 +15,7 @@ using namespace libbndl;
 #ifndef __has_builtin
 #	define __has_builtin(x) 0
 #endif
-inline unsigned long BitScanReverse(unsigned long input)
+static inline unsigned long BitScanReverse(unsigned long input)
 {
 	unsigned long result;
 
@@ -91,10 +91,11 @@ bool Bundle::LoadBND2(binaryio::BinaryReader &reader)
 	const auto numEntries = reader.Read<uint32_t>();
 
 	const auto idBlockOffset = reader.Read<uint32_t>();
-	uint32_t fileBlockOffsets[3];
-	fileBlockOffsets[0] = reader.Read<uint32_t>();
-	fileBlockOffsets[1] = reader.Read<uint32_t>();
-	fileBlockOffsets[2] = reader.Read<uint32_t>();
+	uint32_t fileBlockOffsets[3] = {
+		reader.Read<uint32_t>(),
+		reader.Read<uint32_t>(),
+		reader.Read<uint32_t>()
+	};
 
 	m_flags = reader.Read<Flags>();
 
@@ -161,7 +162,7 @@ bool Bundle::LoadBND2(binaryio::BinaryReader &reader)
 		pugi::xml_document doc;
 		if (doc.load_string(rstXML.c_str(), pugi::parse_minimal))
 		{
-			for (const auto resource : doc.child("ResourceStringTable").children("Resource"))
+			for (const auto &resource : doc.child("ResourceStringTable").children("Resource"))
 			{
 				const auto resourceID = std::stoul(resource.attribute("id").value(), nullptr, 16);
 				auto &debugInfo = m_debugInfoEntries[resourceID];
@@ -388,7 +389,7 @@ bool Bundle::LoadBNDL(binaryio::BinaryReader &reader)
 	pugi::xml_document doc;
 	if (doc.load_string(rstXML.c_str(), pugi::parse_minimal))
 	{
-		for (const auto resource : doc.child("ResourceStringTable").children("Resource"))
+		for (const auto &resource : doc.child("ResourceStringTable").children("Resource"))
 		{
 			const auto resourceID = std::stoul(resource.attribute("id").value(), nullptr, 16);
 			auto &debugInfo = m_debugInfoEntries[resourceID];

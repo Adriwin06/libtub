@@ -43,13 +43,15 @@ namespace libbndl
 		{
 			Raster = 0x00,
 			Material = 0x01,
-			ResourceMesh = 0x02, // found in Black
+			RenderableMesh = 0x02, // found in Black
 			TextFile = 0x03,
 			DrawIndexParams = 0x04, // found in Black
 			IndexBuffer = 0x05, // found in Black
 			MeshState = 0x06, // found in Black
+			TextureAuxInfo = 0x07, // no known builds
+			VertexBufferItem = 0x08, // no known builds
 			VertexBuffer = 0x09, // found in Black
-			VertexDesc = 0x0A,
+			VertexDescriptor = 0x0A,
 			MaterialCRC32 = 0x0B, // 2006
 			Renderable = 0x0C,
 			MaterialTechnique = 0x0D, // last-gen console
@@ -58,6 +60,7 @@ namespace libbndl
 			DepthStencilState = 0x10, // found in Black
 			RasterizerState = 0x11, // found in Black
 			ShaderProgramBuffer = 0x12,
+			RenderTargetState = 0x13, // no known builds
 			ShaderParameter = 0x14,
 			RenderableAssembly = 0x15, // found in Black
 			Debug = 0x16,
@@ -80,7 +83,7 @@ namespace libbndl
 			SatNavTile = 0x28,
 			SatNavTileDirectory = 0x29,
 			Model = 0x2A,
-			RwColourCube = 0x2B,
+			ColourCube = 0x2B,
 			HudMessage = 0x2C,
 			HudMessageList = 0x2D,
 			HudMessageSequence = 0x2E,
@@ -96,8 +99,17 @@ namespace libbndl
 			CommsToolList = 0x46,
 			BinaryFile = 0x50, // Used as a base class for other types, but this type ID was found in one of the builds.
 			AnimationCollection = 0x51,
+
+			// These have unusual categorisation, almost as if the 0x was omitted and these should be in the game-specific section.
+			// All are from Black.
+			CharAnimBankFile = 0x2710, // 10000
+			WeaponFile = 0x2711, // 10001
+			VFXFile = 0x343E, // 13374? - registered as "FileResourceType"
+			BearFile = 0x343F, // 13375? - also registered as "FileResourceType"
+			BkPropInstanceList = 0x3A98, // 15000
 			
 			Registry = 0xA000,
+			GenericRwacFactoryConfiguration = 0xA010, // no known builds
 			GenericRwacWaveContent = 0xA020,
 			GinsuWaveContent = 0xA021,
 			AemsBank = 0xA022,
@@ -110,6 +122,8 @@ namespace libbndl
 			SnapshotData = 0xA029,
 			
 			ZoneList = 0xB000,
+
+			VFX = 0xC001, // no known builds
 
 			// Burnout Paradise
 			LoopModel = 0x10000,
