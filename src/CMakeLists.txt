@@ -18,7 +18,7 @@ add_library(libbndl ${SRC_FILES} ${PUBLIC_HEADERS})
 FetchContent_Declare(
     binaryio
     GIT_REPOSITORY https://github.com/Bo98/libbinaryio
-    GIT_TAG        e79f7930e9a429f6c9010ad8a7f01df2c6026503
+    GIT_TAG        9606328a210598ea296267d04b95650eb46c00ab
     EXCLUDE_FROM_ALL
     FIND_PACKAGE_ARGS
 )
@@ -45,7 +45,7 @@ endif()
 
 add_dependencies(libbndl ZLIB::ZLIB)
 target_link_libraries(libbndl PRIVATE binaryio ZLIB::ZLIB pugixml::pugixml)
-target_compile_definitions(libbndl PRIVATE PUGIXML_HEADER_ONLY)
+target_compile_definitions(libbndl PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
 
 set_property(TARGET libbndl PROPERTY CXX_STANDARD 20)
 set_property(TARGET libbndl PROPERTY PREFIX "")
