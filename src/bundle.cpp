@@ -53,10 +53,14 @@ bool Bundle::Load(const std::string &name)
 		return false;
 
 	stream.seekg(0, std::ios::beg);
-	const auto &buffer = std::make_shared<std::vector<uint8_t>>(fileSize);
-	stream.read(reinterpret_cast<char *>(buffer->data()), fileSize);
+
+	std::vector<uint8_t> buffer(fileSize);
+	stream.read(reinterpret_cast<char *>(buffer.data()), fileSize);
 	stream.close();
-	auto reader = binaryio::BinaryReader(buffer);
+	if (stream.fail())
+		return false;
+
+	auto reader = binaryio::BinaryReader(buffer, std::endian::little);
 
 	// Check if it's a BNDL archive
 	auto magic = reader.ReadString(4);
@@ -75,9 +79,9 @@ bool Bundle::LoadBND2(binaryio::BinaryReader &reader)
 	m_revisionNumber = reader.Read<uint32_t>();
 
 	m_platform = reader.Read<Platform>();
-	reader.SetBigEndian(m_platform != PC);
+	reader.SetEndian(m_platform != PC ? std::endian::big : std::endian::little);
 
-	if (reader.IsBigEndian())
+	if (reader.GetEndian() != std::endian::native)
 		m_revisionNumber = (m_revisionNumber << 24) | (m_revisionNumber << 8 & 0xff0000) | (m_revisionNumber >> 8 & 0xff00) | (m_revisionNumber >> 24);
 	// Little sanity check.
 	if (m_revisionNumber != 2)
@@ -183,7 +187,7 @@ bool Bundle::LoadBNDL(binaryio::BinaryReader &reader)
 		if (platform == PC || platform == Xbox360 || platform == PS3)
 		{
 			m_platform = platform;
-			reader.SetBigEndian(m_platform != PC);
+			reader.SetEndian(m_platform != PC ? std::endian::big : std::endian::little);
 			break;
 		}
 	}
@@ -196,13 +200,13 @@ bool Bundle::LoadBNDL(binaryio::BinaryReader &reader)
 
 	const auto numEntries = reader.Read<uint32_t>();
 
-	auto blocks = 4;
+	uint8_t blocks = 4;
 	if (m_platform == Xbox360)
 		blocks = 5;
 	else if (m_platform == PS3)
 		blocks = 6;
 	uint32_t dataBlockSizes[6];
-	for (auto i = 0; i < blocks; i++)
+	for (uint8_t i = 0; i < blocks; i++)
 	{
 		dataBlockSizes[i] = reader.Read<uint32_t>();
 		reader.Skip<uint32_t>(); // Alignment
@@ -215,9 +219,9 @@ bool Bundle::LoadBNDL(binaryio::BinaryReader &reader)
 	reader.Skip<uint32_t>(); // dependency block
 	reader.Skip<uint32_t>(); // start of data block
 
-	reader.SetBigEndian(false);
+	reader.SetEndian(std::endian::little);
 	reader.Verify<uint32_t>(m_platform);
-	reader.SetBigEndian(m_platform != PC);
+	reader.SetEndian(m_platform != PC ? std::endian::big : std::endian::little);
 
 	auto compressed = 0U;
 	auto uncompInfoOffset = 0U;
@@ -260,7 +264,7 @@ bool Bundle::LoadBNDL(binaryio::BinaryReader &reader)
 
 		if (compressed)
 		{
-			for (auto j = 0; j < blocks; j++)
+			for (uint8_t j = 0; j < blocks; j++)
 			{
 				auto mappedBlock = MapBNDLBlockToBND2(j);
 				if (mappedBlock == -1)
@@ -277,7 +281,7 @@ bool Bundle::LoadBNDL(binaryio::BinaryReader &reader)
 		}
 		else
 		{
-			for (auto j = 0; j < blocks; j++)
+			for (uint8_t j = 0; j < blocks; j++)
 			{
 				auto mappedBlock = MapBNDLBlockToBND2(j);
 				if (mappedBlock == -1)
@@ -295,7 +299,7 @@ bool Bundle::LoadBNDL(binaryio::BinaryReader &reader)
 
 		auto dataReader = reader.Copy();
 		auto dataBlockStartOffset = 0;
-		for (auto j = 0; j < blocks; j++)
+		for (uint8_t j = 0; j < blocks; j++)
 		{
 			if (j > 0)
 				dataBlockStartOffset += dataBlockSizes[j - 1];
@@ -336,7 +340,7 @@ bool Bundle::LoadBNDL(binaryio::BinaryReader &reader)
 		{
 			auto &e = m_entries[resourceID];
 
-			for (auto j = 0; j < blocks; j++)
+			for (uint8_t j = 0; j < blocks; j++)
 			{
 				auto mappedBlock = MapBNDLBlockToBND2(j);
 				if (mappedBlock == -1)
@@ -373,7 +377,7 @@ bool Bundle::LoadBNDL(binaryio::BinaryReader &reader)
 
 	m_flags = static_cast<Flags>(m_flags | HasResourceStringTable);
 
-	auto rstReader = binaryio::BinaryReader(std::move(rstFile));
+	auto rstReader = binaryio::BinaryReader(*rstFile);
 
 	const auto strLen = rstReader.Read<uint32_t>();
 	auto rstXML = rstReader.ReadString(strLen);
@@ -404,7 +408,7 @@ bool Bundle::LoadBNDL(binaryio::BinaryReader &reader)
 
 int8_t Bundle::MapBNDLBlockToBND2(uint8_t block) const
 {
-	auto mappedBlock = block;
+	auto mappedBlock = static_cast<int8_t>(block);
 	switch (m_platform)
 	{
 	case PC:
@@ -471,7 +475,7 @@ bool Bundle::SaveBND2(binaryio::BinaryWriter &writer)
 
 	auto idBlockPointerPos = writer.GetOffset();
 	writer.Seek(4, std::ios::cur); // write later
-	off_t fileBlockPointerPos[3];
+	size_t fileBlockPointerPos[3];
 	for (auto &pointerPos : fileBlockPointerPos)
 	{
 		pointerPos = writer.GetOffset();
@@ -484,7 +488,7 @@ bool Bundle::SaveBND2(binaryio::BinaryWriter &writer)
 
 
 	// RESOURCE STRING TABLE
-	writer.VisitAndWrite<uint32_t>(rstPointerPos, writer.GetOffset());
+	writer.VisitAndWrite<uint32_t>(rstPointerPos, writer.GetOffset32());
 	if (m_flags & HasResourceStringTable)
 	{
 		pugi::xml_document doc;
@@ -511,8 +515,8 @@ bool Bundle::SaveBND2(binaryio::BinaryWriter &writer)
 
 
 	// ID BLOCK
-	writer.VisitAndWrite<uint32_t>(idBlockPointerPos, writer.GetOffset());
-	auto entryDataPointerPos = std::vector<std::array<off_t, 3>>(m_entries.size());
+	writer.VisitAndWrite<uint32_t>(idBlockPointerPos, writer.GetOffset32());
+	auto entryDataPointerPos = std::vector<std::array<size_t, 3>>(m_entries.size());
 	auto entryIter = m_entries.begin();
 	for (auto i = 0U; i < m_entries.size(); i++)
 	{
@@ -544,7 +548,7 @@ bool Bundle::SaveBND2(binaryio::BinaryWriter &writer)
 	// DATA BLOCK
 	for (auto i = 0; i < 3; i++)
 	{
-		const auto blockStart = writer.GetOffset();
+		const auto blockStart = writer.GetOffset32();
 		writer.VisitAndWrite<uint32_t>(fileBlockPointerPos[i], blockStart);
 
 		entryIter = m_entries.begin();
@@ -557,7 +561,7 @@ bool Bundle::SaveBND2(binaryio::BinaryWriter &writer)
 
 			if (readSize > 0)
 			{
-				writer.VisitAndWrite<uint32_t>(entryDataPointerPos[j][i], writer.GetOffset() - blockStart);
+				writer.VisitAndWrite<uint32_t>(entryDataPointerPos[j][i], writer.GetOffset32() - blockStart);
 				writer.Write(dataInfo.data->data(), readSize);
 				writer.Align((i != 0 && j != m_entries.size() - 1) ? 0x80 : 16);
 			}
@@ -577,7 +581,7 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 	if (m_revisionNumber <= 3 && (m_flags & Compressed) != 0)
 		return false; // Invalid combination
 
-	writer.SetBigEndian(m_platform != PC);
+	writer.SetEndian(m_platform != PC ? std::endian::big : std::endian::little);
 
 	writer.Write("bndl", 4);
 	writer.Write<uint32_t>(m_revisionNumber);
@@ -589,14 +593,14 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 
 	writer.Write<uint32_t>(entryCount);
 
-	auto blocks = 4;
+	uint8_t blocks = 4;
 	if (m_platform == Xbox360)
 		blocks = 5;
 	else if (m_platform == PS3)
 		blocks = 6;
 
-	off_t dataBlockDescriptorsPos[3];
-	for (auto i = 0; i < blocks; i++)
+	size_t dataBlockDescriptorsPos[3];
+	for (uint8_t i = 0; i < blocks; i++)
 	{
 		auto mappedBlock = MapBNDLBlockToBND2(i);
 		if (mappedBlock != -1)
@@ -619,17 +623,17 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 	auto dataBlockPointerPos = writer.GetOffset();
 	writer.Seek(4, std::ios::cur);
 
-	writer.SetBigEndian(false);
+	writer.SetEndian(std::endian::little);
 	writer.Write<uint32_t>(m_platform);
-	writer.SetBigEndian(m_platform != PC);
+	writer.SetEndian(m_platform != PC ? std::endian::big : std::endian::little);
 
-	off_t uncompInfoBlockPointerPos = 0;
+	size_t uncompInfoBlockPointerPos = 0;
 
 	if (m_revisionNumber >= 4)
 	{
 		writer.Write<uint32_t>(m_flags & Compressed);
 		writer.Write<uint32_t>((m_flags & Compressed) ? entryCount : 0);
-		auto uncompInfoBlockPointerPos = writer.GetOffset();
+		uncompInfoBlockPointerPos = writer.GetOffset();
 		writer.Write<uint32_t>(0); // will write later, but only if needed
 	}
 
@@ -642,7 +646,7 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 	writer.Align(0x10);
 
 	// ID LIST
-	writer.VisitAndWrite<uint32_t>(idListPointerPos, writer.GetOffset());
+	writer.VisitAndWrite<uint32_t>(idListPointerPos, writer.GetOffset32());
 	for (const auto &entry : m_entries)
 	{
 		writer.Write<uint64_t>(entry.first);
@@ -685,12 +689,12 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 	}
 
 	// ID TABLE
-	writer.VisitAndWrite<uint32_t>(idTablePointerPos, writer.GetOffset());
+	writer.VisitAndWrite<uint32_t>(idTablePointerPos, writer.GetOffset32());
 
 	struct FilePointerPosHelper
 	{
-		off_t importPointerPos;
-		off_t dataBlockPointerPos[3];
+		size_t importPointerPos;
+		size_t dataBlockPointerPos[3];
 	};
 	std::map<uint32_t, FilePointerPosHelper> filePointerPosMap;
 	for (const auto &entry : m_entries)
@@ -704,7 +708,7 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 
 		writer.Write(entry.second.info.resourceType);
 
-		for (auto i = 0; i < blocks; i++)
+		for (uint8_t i = 0; i < blocks; i++)
 		{
 			auto mappedBlock = MapBNDLBlockToBND2(i);
 			if (mappedBlock == -1)
@@ -721,7 +725,7 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 			}
 		}
 
-		for (auto i = 0; i < blocks; i++)
+		for (uint8_t i = 0; i < blocks; i++)
 		{
 			auto mappedBlock = MapBNDLBlockToBND2(i);
 			if (mappedBlock != -1)
@@ -739,10 +743,10 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 	// UNCOMPRESSED SIZE INFO
 	if (m_flags & Compressed)
 	{
-		writer.VisitAndWrite<uint32_t>(uncompInfoBlockPointerPos, writer.GetOffset());
+		writer.VisitAndWrite<uint32_t>(uncompInfoBlockPointerPos, writer.GetOffset32());
 		for (const auto &entry : m_entries)
 		{
-			for (auto i = 0; i < blocks; i++)
+			for (uint8_t i = 0; i < blocks; i++)
 			{
 				auto mappedBlock = MapBNDLBlockToBND2(i);
 				if (mappedBlock == -1)
@@ -761,14 +765,14 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 	}
 
 	// IMPORTS
-	writer.VisitAndWrite<uint32_t>(importBlockPointerPos, writer.GetOffset());
+	writer.VisitAndWrite<uint32_t>(importBlockPointerPos, writer.GetOffset32());
 	for (const auto &entry : m_entries)
 	{
 		const auto &imports = m_dependencies[entry.first];
 		if (imports.empty())
 			continue;
 
-		writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first).importPointerPos, writer.GetOffset());
+		writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first).importPointerPos, writer.GetOffset32());
 
 		writer.Write(static_cast<uint32_t>(imports.size()));
 		writer.Write<uint32_t>(0); // padding
@@ -781,8 +785,8 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 	}
 
 	// DATA
-	writer.VisitAndWrite<uint32_t>(dataBlockPointerPos, writer.GetOffset());
-	off_t blockStartOffset = 0;
+	writer.VisitAndWrite<uint32_t>(dataBlockPointerPos, writer.GetOffset32());
+	uint32_t blockStartOffset = 0;
 	for (auto i = 0; i < 3; i++)
 	{
 		for (const auto &entry : m_entries)
@@ -794,15 +798,15 @@ bool Bundle::SaveBNDL(binaryio::BinaryWriter &writer)
 
 			if (readSize > 0)
 			{
-				writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first).dataBlockPointerPos[i], writer.GetOffset() - blockStartOffset);
+				writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first).dataBlockPointerPos[i], writer.GetOffset32() - blockStartOffset);
 				writer.Write(dataInfo.data->data(), readSize);
 			}
 		}
 
-		const auto size = writer.GetOffset() - blockStartOffset;
+		const auto size = writer.GetOffset32() - blockStartOffset;
 		writer.VisitAndWrite<uint32_t>(dataBlockDescriptorsPos[i], size);
 		writer.VisitAndWrite<uint32_t>(dataBlockDescriptorsPos[i], (size == 0) ? 1 : ((i >= 1) ? 4096 : 1024)); // TODO: This changes and I don't know the pattern.
-		blockStartOffset = writer.GetOffset();
+		blockStartOffset = writer.GetOffset32();
 	}
 
 	m_entries.erase(0xFFFFFFFF);
@@ -854,7 +858,7 @@ std::optional<Bundle::EntryData> Bundle::GetData(uint32_t resourceID) const
 		else
 		{
 			const auto buffer = std::make_shared<std::vector<uint8_t>>(data.fileBlockData[0]->begin() + it->second.info.dependenciesOffset, data.fileBlockData[0]->end());
-			binaryio::BinaryReader reader(buffer, m_platform != PC);
+			binaryio::BinaryReader reader(*buffer, m_platform != PC ? std::endian::big : std::endian::little);
 			for (auto i = 0U; i < numDependencies; i++)
 				data.dependencies.emplace_back(ReadDependency(reader));
 			data.fileBlockData[0]->resize(data.fileBlockData[0]->size() - buffer->size());

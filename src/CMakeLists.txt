@@ -18,7 +18,7 @@ add_library(libbndl ${SRC_FILES} ${PUBLIC_HEADERS})
 FetchContent_Declare(
     binaryio
     GIT_REPOSITORY https://github.com/Bo98/libbinaryio
-    GIT_TAG        bd46c9df067f67d514fd781ea6dfb1b289d648f8
+    GIT_TAG        e79f7930e9a429f6c9010ad8a7f01df2c6026503
     EXCLUDE_FROM_ALL
     FIND_PACKAGE_ARGS
 )
@@ -44,10 +44,10 @@ if(NOT ZLIB_FOUND AND NOT BUILD_SHARED_LIBS)
 endif()
 
 add_dependencies(libbndl ZLIB::ZLIB)
-target_link_libraries(libbndl PRIVATE libbinaryio ZLIB::ZLIB pugixml::pugixml)
+target_link_libraries(libbndl PRIVATE binaryio ZLIB::ZLIB pugixml::pugixml)
 target_compile_definitions(libbndl PRIVATE PUGIXML_HEADER_ONLY)
 
-set_property(TARGET libbndl PROPERTY CXX_STANDARD 17)
+set_property(TARGET libbndl PROPERTY CXX_STANDARD 20)
 set_property(TARGET libbndl PROPERTY PREFIX "")
 set_property(TARGET libbndl PROPERTY CXX_VISIBILITY_PRESET hidden)
 
@@ -59,7 +59,7 @@ generate_export_header(libbndl)
 target_include_directories(libbndl PUBLIC ${LIBBNDL_ROOT}/include ${CMAKE_CURRENT_BINARY_DIR})
 
 if(MSVC)
-    target_compile_options(libbndl PRIVATE "/permissive-" "/W3" "/Zc:throwingNew" "/EHsc")
+    target_compile_options(libbndl PRIVATE "/W4" "/Zc:throwingNew" "/EHsc")
 endif()
 
 set_property(TARGET libbndl PROPERTY POSITION_INDEPENDENT_CODE ON)

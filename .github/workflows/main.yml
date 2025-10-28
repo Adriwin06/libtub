@@ -19,14 +19,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
           submodules: recursive
 
       - name: Setup MSVC
         if: runner.os == 'Windows'
-        uses: TheMrMilchmann/setup-msvc-dev@v3
+        uses: TheMrMilchmann/setup-msvc-dev@v4
         with:
           arch: x64
 
@@ -45,7 +45,7 @@ jobs:
           cmake --build build
           cmake --install build
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: libbndl-${{ matrix.build_type }}-${{ matrix.os }}
           path: install/*
