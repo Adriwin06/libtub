@@ -96,7 +96,7 @@ void Editor::PopulateTree()
 	//get root of the tree
 	m_model->clear();
 	QStandardItem *item = m_model->invisibleRootItem();
-	for (const auto &resourceID : m_archive.ListResourceIDs())
+	for (const auto &resourceID : m_archive.GetResourceIDs())
 	{
 		const auto info = m_archive.GetResourceDebugInfo(resourceID);
 		const auto &name = info ? QString::fromStdString(info->name) : QString::number(resourceID, 16);

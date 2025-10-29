@@ -1081,7 +1081,7 @@ void Bundle::WriteDependency(binaryio::BinaryWriter &writer, const Dependency &d
 	writer.Align(8);
 }
 
-std::vector<uint32_t> Bundle::ListResourceIDs() const
+std::vector<uint32_t> Bundle::GetResourceIDs() const
 {
 	std::vector<uint32_t> entries;
 	for (const auto &e : m_entries)
@@ -1091,7 +1091,7 @@ std::vector<uint32_t> Bundle::ListResourceIDs() const
 	return entries;
 }
 
-std::map<Bundle::ResourceType, std::vector<uint32_t>> Bundle::ListResourceIDsByType() const
+std::map<Bundle::ResourceType, std::vector<uint32_t>> Bundle::GetResourceIDsByType() const
 {
 	std::map<ResourceType, std::vector<uint32_t>> entriesByResourceType;
 	for (const auto &e : m_entries)

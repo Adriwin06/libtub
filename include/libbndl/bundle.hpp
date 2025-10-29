@@ -298,34 +298,19 @@ namespace libbndl
 		LIBBNDL_EXPORT bool Load(const std::string &name);
 		LIBBNDL_EXPORT bool Save(const std::string &name);
 
-		LIBBNDL_EXPORT MagicVersion GetMagicVersion() const
-		{
-			return m_magicVersion;
-		}
+		LIBBNDL_EXPORT [[nodiscard]] constexpr MagicVersion GetMagicVersion() const { return m_magicVersion; }
+		LIBBNDL_EXPORT [[nodiscard]] constexpr uint32_t GetRevisionNumber() const { return m_revisionNumber; }
+		LIBBNDL_EXPORT [[nodiscard]] constexpr Platform GetPlatform() const { return m_platform; }
+		LIBBNDL_EXPORT [[nodiscard]] constexpr Flags GetFlags() const { return m_flags; }
 
-		LIBBNDL_EXPORT uint32_t GetRevisionNumber() const
-		{
-			return m_revisionNumber;
-		}
-
-		LIBBNDL_EXPORT Platform GetPlatform() const
-		{
-			return m_platform;
-		}
-
-		LIBBNDL_EXPORT Flags GetFlags() const
-		{
-			return m_flags;
-		}
-
-		LIBBNDL_EXPORT std::optional<ResourceDebugInfo> GetResourceDebugInfo(const std::string &resourceName) const;
-		LIBBNDL_EXPORT std::optional<ResourceDebugInfo> GetResourceDebugInfo(uint32_t resourceID) const;
-		LIBBNDL_EXPORT std::optional<ResourceType> GetResourceType(const std::string &resourceName) const;
-		LIBBNDL_EXPORT std::optional<ResourceType> GetResourceType(uint32_t resourceID) const;
-		LIBBNDL_EXPORT std::optional<Resource> GetResource(const std::string &resourceName) const;
-		LIBBNDL_EXPORT std::optional<Resource> GetResource(uint32_t resourceID) const;
-		LIBBNDL_EXPORT Buffer GetBinary(const std::string &resourceName, MemoryType fileBlock) const;
-		LIBBNDL_EXPORT Buffer GetBinary(uint32_t resourceID, MemoryType fileBlock) const;
+		LIBBNDL_EXPORT [[nodiscard]] std::optional<ResourceDebugInfo> GetResourceDebugInfo(const std::string &resourceName) const;
+		LIBBNDL_EXPORT [[nodiscard]] std::optional<ResourceDebugInfo> GetResourceDebugInfo(uint32_t resourceID) const;
+		LIBBNDL_EXPORT [[nodiscard]] std::optional<ResourceType> GetResourceType(const std::string &resourceName) const;
+		LIBBNDL_EXPORT [[nodiscard]] std::optional<ResourceType> GetResourceType(uint32_t resourceID) const;
+		LIBBNDL_EXPORT [[nodiscard]] std::optional<Resource> GetResource(const std::string &resourceName) const;
+		LIBBNDL_EXPORT [[nodiscard]] std::optional<Resource> GetResource(uint32_t resourceID) const;
+		LIBBNDL_EXPORT [[nodiscard]] Buffer GetBinary(const std::string &resourceName, MemoryType fileBlock) const;
+		LIBBNDL_EXPORT [[nodiscard]] Buffer GetBinary(uint32_t resourceID, MemoryType fileBlock) const;
 
 		LIBBNDL_EXPORT bool AddResource(const std::string &resourceName, const Resource &data, ResourceType resourceType);
 		LIBBNDL_EXPORT bool AddResource(uint32_t resourceID, const Resource &data, ResourceType resourceType);
@@ -335,10 +320,10 @@ namespace libbndl
 		LIBBNDL_EXPORT bool ReplaceResource(const std::string &resourceName, const Resource &data);
 		LIBBNDL_EXPORT bool ReplaceResource(uint32_t resourceID, const Resource &data);
 
-		LIBBNDL_EXPORT std::vector<uint32_t> ListResourceIDs() const;
-		LIBBNDL_EXPORT std::map<ResourceType, std::vector<uint32_t>> ListResourceIDsByType() const;
+		LIBBNDL_EXPORT [[nodiscard]] std::vector<uint32_t> GetResourceIDs() const;
+		LIBBNDL_EXPORT [[nodiscard]] std::map<ResourceType, std::vector<uint32_t>> GetResourceIDsByType() const;
 
-		LIBBNDL_EXPORT std::vector<MemoryType> GetMemoryTypes() const;
+		LIBBNDL_EXPORT [[nodiscard]] std::vector<MemoryType> GetMemoryTypes() const;
 
 	private:
 		std::map<uint32_t, Entry>	m_entries;
@@ -354,10 +339,10 @@ namespace libbndl
 		bool LoadBNDL(binaryio::BinaryReader &reader);
 		bool SaveBND2(binaryio::BinaryWriter &writer);
 		bool SaveBNDL(binaryio::BinaryWriter &writer);
-		int8_t MapBNDLBlockToBND2(uint8_t block) const;
-		uint32_t HashResourceName(std::string resourceName) const;
+		[[nodiscard]] int8_t MapBNDLBlockToBND2(uint8_t block) const;
+		[[nodiscard]] uint32_t HashResourceName(std::string resourceName) const;
 
-		static Dependency ReadDependency(binaryio::BinaryReader &reader);
+		static [[nodiscard]] Dependency ReadDependency(binaryio::BinaryReader &reader);
 		static void WriteDependency(binaryio::BinaryWriter &writer, const Dependency &dependency);
 	};
 }

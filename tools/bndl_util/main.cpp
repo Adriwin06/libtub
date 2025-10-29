@@ -50,7 +50,7 @@ int main(int argc, char** argv)
 			std::cout.fill('-');
 			std::cout << std::left << std::setw(70) << "NAME" << std::right << "FILE TYPE" << std::endl;
 			std::cout.fill(' ');
-			for (const auto &resourceID : arch.ListResourceIDs())
+			for (const auto &resourceID : arch.GetResourceIDs())
 			{
 				const auto debugInfo = arch.GetResourceDebugInfo(resourceID);
 				const auto resourceType = *arch.GetResourceType(resourceID);
