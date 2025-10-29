@@ -38,6 +38,7 @@ FetchContent_Declare(
 )
 
 set(ZLIB_BUILD_SHARED ${BUILD_SHARED_LIBS})
+set(ZLIB_BUILD_TESTING OFF)
 FetchContent_MakeAvailable(binaryio ZLIB pugixml)
 if(NOT ZLIB_FOUND AND NOT BUILD_SHARED_LIBS)
     add_library(ZLIB::ZLIB ALIAS zlibstatic)
@@ -72,3 +73,8 @@ if(CMAKE_CXX_LINKER_SUPPORTS_PDB AND BUILD_SHARED_LIBS)
 endif()
 install(FILES ${PUBLIC_HEADERS} ${CMAKE_CURRENT_BINARY_DIR}/libbndl_export.h DESTINATION include/libbndl)
 install(FILES ${LIBBNDL_ROOT}/LICENSE.md DESTINATION share/libbndl RENAME copyright)
+
+if(NOT ZLIB_FOUND AND BUILD_SHARED_LIBS)
+    install(TARGETS zlib RUNTIME DESTINATION bin
+                               LIBRARY DESTINATION lib)
+endif()

@@ -19,7 +19,8 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
-        "LIBBNDL_BUILD_TOOLS": "ON"
+        "LIBBNDL_BUILD_TOOLS": "ON",
+        "LIBBNDL_INSTALL_TOOLS": "ON"
       }
     },
     {
@@ -413,7 +414,7 @@
   ],
   "vendor": {
     "qt-project.org/Presets": {
-      "checksum": "ED8ghO2QXNMoIF8tuI4U/Rt6tJw="
+      "checksum": "YMZgAov16/vL9KShMbHsAB8IkfY="
     }
   }
 }

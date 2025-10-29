@@ -8,10 +8,10 @@ add_executable(bndl_edit main.cpp editor.cpp editor.hpp)
 target_link_libraries(bndl_edit libbndl Qt6::Widgets)
 target_include_directories(bndl_edit PRIVATE)
 
-set_property(TARGET bndl_edit PROPERTY CXX_STANDARD 17)
+set_property(TARGET bndl_edit PROPERTY CXX_STANDARD 20)
 
 option(LIBBNDL_INSTALL_UI "Install UI tools" OFF)
-if(LIBBNDL_INSTALL_UI)
+if(LIBBNDL_INSTALL_TOOLS AND LIBBNDL_INSTALL_UI)
     install(TARGETS bndl_edit RUNTIME DESTINATION bin
                               LIBRARY DESTINATION lib
                               ARCHIVE DESTINATION lib)
