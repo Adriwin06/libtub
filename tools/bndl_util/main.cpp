@@ -52,7 +52,7 @@ int main(int argc, char** argv)
 			std::cout.fill(' ');
 			for (const auto &resourceID : arch.ListResourceIDs())
 			{
-				const auto debugInfo = arch.GetDebugInfo(resourceID);
+				const auto debugInfo = arch.GetResourceDebugInfo(resourceID);
 				const auto resourceType = *arch.GetResourceType(resourceID);
 				std::ostringstream name;
 				if (debugInfo)

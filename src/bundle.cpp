@@ -368,13 +368,13 @@ bool Bundle::LoadBNDL(binaryio::BinaryReader &reader)
 			m_dependencies[resourceID].emplace_back(ReadDependency(reader));
 	}
 
-	auto rstFile = GetBinary(0xC039284A, 0);
+	auto rstFile = GetBinary(0xC039284A, MemoryType::MainMemory);
 	if (rstFile == nullptr)
 		return true;
 
 	m_flags = static_cast<Flags>(m_flags | HasResourceStringTable);
 
-	auto rstReader = binaryio::BinaryReader(*rstFile);
+	auto rstReader = binaryio::BinaryReader(rstFile);
 
 	const auto strLen = rstReader.Read<uint32_t>();
 	auto rstXML = rstReader.ReadString(strLen);
@@ -831,50 +831,53 @@ Bundle::Dependency Bundle::ReadDependency(binaryio::BinaryReader &reader)
 	return dep;
 }
 
-std::optional<Bundle::EntryData> Bundle::GetData(const std::string &resourceName) const
+std::optional<Bundle::Resource> Bundle::GetResource(const std::string &resourceName) const
 {
-	return GetData(HashResourceName(resourceName));
+	return GetResource(HashResourceName(resourceName));
 }
 
-std::optional<Bundle::EntryData> Bundle::GetData(uint32_t resourceID) const
+std::optional<Bundle::Resource> Bundle::GetResource(uint32_t resourceID) const
 {
 	const auto it = m_entries.find(resourceID);
 	if (it == m_entries.end())
 		return {};
 
-	EntryData data;
-	for (auto i = 0; i < 3; i++)
-	{
-		data.fileBlockData[i] = GetBinary(resourceID, i);
-		data.alignments[i] = it->second.fileBlockData[i].uncompressedAlignment;
-	}
+	std::array<Buffer, 3> buffers;
+	for (const auto &memoryType : GetMemoryTypes())
+		buffers[LIBBNDL_TO_UNDERLYING(memoryType)] = GetBinary(resourceID, memoryType);
 
+	std::vector<Dependency> dependencies;
 	const auto numDependencies = it->second.info.numberOfDependencies;
 	if (numDependencies > 0)
 	{
 		if (m_magicVersion == BNDL)
 		{
-			data.dependencies = m_dependencies.at(resourceID);
+			dependencies = m_dependencies.at(resourceID);
 		}
 		else
 		{
-			const auto buffer = std::make_shared<std::vector<uint8_t>>(data.fileBlockData[0]->begin() + it->second.info.dependenciesOffset, data.fileBlockData[0]->end());
-			binaryio::BinaryReader reader(*buffer, m_platform != PC ? std::endian::big : std::endian::little);
+			dependencies.reserve(numDependencies);
+
+			binaryio::BinaryReader reader(buffers[0], m_platform != PC ? std::endian::big : std::endian::little);
+			reader.Seek(it->second.info.dependenciesOffset);
 			for (auto i = 0U; i < numDependencies; i++)
-				data.dependencies.emplace_back(ReadDependency(reader));
-			data.fileBlockData[0]->resize(data.fileBlockData[0]->size() - buffer->size());
+				dependencies.emplace_back(ReadDependency(reader));
+
+			auto buffer = std::make_unique_for_overwrite<uint8_t[]>(buffers[0].GetSize());
+			std::memcpy(buffer.get(), buffers[0].GetData(), buffers[0].GetSize());
+			buffers[0] = { std::move(buffer), buffers[0].GetSize(), buffers[0].GetAlignment() };
 		}
 	}
 
-	return std::move(data);
+	return Resource{ std::move(buffers), std::move(dependencies) };
 }
 
-std::unique_ptr<std::vector<uint8_t>> Bundle::GetBinary(const std::string &resourceName, uint32_t fileBlock) const
+Bundle::Buffer Bundle::GetBinary(const std::string &resourceName, MemoryType fileBlock) const
 {
 	return GetBinary(HashResourceName(resourceName), fileBlock);
 }
 
-std::unique_ptr<std::vector<uint8_t>> Bundle::GetBinary(uint32_t resourceID, uint32_t fileBlock) const
+Bundle::Buffer Bundle::GetBinary(uint32_t resourceID, MemoryType fileBlock) const
 {
 	const auto it = m_entries.find(resourceID);
 	if (it == m_entries.end())
@@ -882,7 +885,7 @@ std::unique_ptr<std::vector<uint8_t>> Bundle::GetBinary(uint32_t resourceID, uin
 
 	const auto &e = it->second;
 
-	const auto &dataInfo = e.fileBlockData[fileBlock];
+	const auto &dataInfo = e.fileBlockData[LIBBNDL_TO_UNDERLYING(fileBlock)];
 
 	if (dataInfo.data == nullptr)
 		return {};
@@ -890,32 +893,32 @@ std::unique_ptr<std::vector<uint8_t>> Bundle::GetBinary(uint32_t resourceID, uin
 	const auto &buffer = dataInfo.data;
 	const auto uncompressedSize = dataInfo.uncompressedSize;
 
-	auto uncompressedBuffer = std::make_unique<std::vector<uint8_t>>(uncompressedSize);
+	auto uncompressedBuffer = std::make_unique_for_overwrite<uint8_t[]>(uncompressedSize);
 
 	if (dataInfo.compressedSize > 0)
 	{
 		assert(m_flags & Compressed);
 
 		uLongf uncompressedSizeLong = uncompressedSize;
-		const auto ret = uncompress(uncompressedBuffer->data(), &uncompressedSizeLong, buffer.get(), static_cast<uLong>(dataInfo.compressedSize));
+		const auto ret = uncompress(uncompressedBuffer.get(), &uncompressedSizeLong, buffer.get(), static_cast<uLong>(dataInfo.compressedSize));
 
 		assert(ret == Z_OK);
 		assert(uncompressedSize == uncompressedSizeLong);
 	}
 	else
 	{
-		std::memcpy(uncompressedBuffer->data(), buffer.get(), uncompressedSize);
+		std::memcpy(uncompressedBuffer.get(), buffer.get(), uncompressedSize);
 	}
 
-	return uncompressedBuffer;
+	return { std::move(uncompressedBuffer), uncompressedSize, dataInfo.uncompressedAlignment };
 }
 
-std::optional<Bundle::EntryDebugInfo> Bundle::GetDebugInfo(const std::string &resourceName) const
+std::optional<Bundle::ResourceDebugInfo> Bundle::GetResourceDebugInfo(const std::string &resourceName) const
 {
-	return GetDebugInfo(HashResourceName(resourceName));
+	return GetResourceDebugInfo(HashResourceName(resourceName));
 }
 
-std::optional<Bundle::EntryDebugInfo> Bundle::GetDebugInfo(uint32_t resourceID) const
+std::optional<Bundle::ResourceDebugInfo> Bundle::GetResourceDebugInfo(uint32_t resourceID) const
 {
 	const auto it = m_debugInfoEntries.find(resourceID);
 	if (it == m_debugInfoEntries.end())
@@ -938,50 +941,51 @@ std::optional<Bundle::ResourceType> Bundle::GetResourceType(uint32_t resourceID)
 	return it->second.info.resourceType;
 }
 
-bool Bundle::AddResource(const std::string &resourceName, const EntryData &data, Bundle::ResourceType resourceType)
+bool Bundle::AddResource(const std::string &resourceName, const Resource &resource, Bundle::ResourceType resourceType)
 {
-	return AddResource(HashResourceName(resourceName), data, resourceType);
+	return AddResource(HashResourceName(resourceName), resource, resourceType);
 }
 
-bool Bundle::AddResource(uint32_t resourceID, const EntryData &data, Bundle::ResourceType resourceType)
+bool Bundle::AddResource(uint32_t resourceID, const Resource &resource, Bundle::ResourceType resourceType)
 {
 	const auto it = m_entries.find(resourceID);
-	if (it != m_entries.end() || data.dependencies.size() > std::numeric_limits<uint16_t>::max())
+	if (it != m_entries.end() || resource.GetDependencies().size() > std::numeric_limits<uint16_t>::max())
 		return false;
 
 	Entry &e = m_entries[resourceID];
 	e.info.resourceType = resourceType;
 
-	return ReplaceResource(resourceID, data);
+	return ReplaceResource(resourceID, resource);
 }
 
-bool Bundle::AddDebugInfo(const std::string &resourceName, const std::string &name, const std::string &type)
+bool Bundle::AddResourceDebugInfo(const std::string &resourceName, const std::string &name, const std::string &type)
 {
-	return AddDebugInfo(HashResourceName(resourceName), name, type);
+	return AddResourceDebugInfo(HashResourceName(resourceName), name, type);
 }
 
-bool Bundle::AddDebugInfo(uint32_t resourceID, const std::string &name, const std::string &type)
+bool Bundle::AddResourceDebugInfo(uint32_t resourceID, const std::string &name, const std::string &type)
 {
 	const auto it = m_debugInfoEntries.find(resourceID);
 	if (it != m_debugInfoEntries.end())
 		return false;
 
-	EntryDebugInfo &debugInfo = m_debugInfoEntries[resourceID];
+	ResourceDebugInfo &debugInfo = m_debugInfoEntries[resourceID];
 	debugInfo.name = name;
 	debugInfo.typeName = type;
 
 	return true;
 }
 
-bool Bundle::ReplaceResource(const std::string &resourceName, const EntryData &data)
+bool Bundle::ReplaceResource(const std::string &resourceName, const Resource &resource)
 {
-	return ReplaceResource(HashResourceName(resourceName), data);
+	return ReplaceResource(HashResourceName(resourceName), resource);
 }
 
-bool Bundle::ReplaceResource(uint32_t resourceID, const EntryData &data)
+bool Bundle::ReplaceResource(uint32_t resourceID, const Resource &resource)
 {
 	const auto it = m_entries.find(resourceID);
-	if (it == m_entries.end() || data.dependencies.size() > std::numeric_limits<uint16_t>::max())
+	const auto &dependencies = resource.GetDependencies();
+	if (it == m_entries.end() || dependencies.size() > std::numeric_limits<uint16_t>::max())
 		return false;
 
 	Entry &e = it->second;
@@ -990,12 +994,12 @@ bool Bundle::ReplaceResource(uint32_t resourceID, const EntryData &data)
 	e.info.dependenciesOffset = 0;
 	e.info.numberOfDependencies = 0;
 
-	for (auto i = 0; i < 3; i++)
+	for (const auto &memoryType : GetMemoryTypes())
 	{
-		const auto &inDataInfo = data.fileBlockData[i];
-		auto &outDataInfo = e.fileBlockData[i];
+		const auto &inDataInfo = resource.GetBinary(memoryType);
+		auto &outDataInfo = e.fileBlockData[LIBBNDL_TO_UNDERLYING(memoryType)];
 
-		if (inDataInfo == nullptr || inDataInfo->empty())
+		if (inDataInfo == nullptr)
 		{
 			outDataInfo.data = nullptr;
 			outDataInfo.uncompressedSize = 0;
@@ -1007,10 +1011,10 @@ bool Bundle::ReplaceResource(uint32_t resourceID, const EntryData &data)
 		size_t inSize;
 		std::unique_ptr<uint8_t[]> outBuffer;
 
-		if (m_magicVersion == BND2 && i == 0 && !data.dependencies.empty())
+		if (m_magicVersion == BND2 && memoryType == MemoryType::MainMemory && !dependencies.empty())
 		{
 			binaryio::BinaryWriter writer;
-			for (const auto &dependency : data.dependencies)
+			for (const auto &dependency : dependencies)
 			{
 				WriteDependency(writer, dependency);
 				e.info.checksum &= dependency.resourceID;
@@ -1018,22 +1022,22 @@ bool Bundle::ReplaceResource(uint32_t resourceID, const EntryData &data)
 			const auto depSize = writer.GetSize();
 			auto depStream = writer.GetStream();
 
-			const auto inDataInfoSize = inDataInfo->size();
+			const auto inDataInfoSize = inDataInfo.GetSize();
 			binaryio::Align(inDataInfoSize, 16);
 
 			inSize = inDataInfoSize + depSize;
 			inBuffer = std::make_unique_for_overwrite<uint8_t[]>(inSize);
-			std::memcpy(inBuffer.get(), inDataInfo->data(), inDataInfoSize);
+			std::memcpy(inBuffer.get(), inDataInfo.GetData(), inDataInfoSize);
 			std::memcpy(inBuffer.get() + inDataInfoSize, depStream.view().data(), depSize);
 
 			e.info.dependenciesOffset = static_cast<uint32_t>(inSize);
-			e.info.numberOfDependencies = static_cast<uint16_t>(data.dependencies.size());
+			e.info.numberOfDependencies = static_cast<uint16_t>(dependencies.size());
 		}
 		else
 		{
-			inSize = inDataInfo->size();
+			inSize = inDataInfo.GetSize();
 			inBuffer = std::make_unique_for_overwrite<uint8_t[]>(inSize);
-			std::memcpy(inBuffer.get(), inDataInfo->data(), inSize);
+			std::memcpy(inBuffer.get(), inDataInfo.GetData(), inSize);
 		}
 
 		const auto uncompressedSize = static_cast<uint32_t>(inSize);
@@ -1064,7 +1068,7 @@ bool Bundle::ReplaceResource(uint32_t resourceID, const EntryData &data)
 
 		outDataInfo.uncompressedSize = uncompressedSize;
 		outDataInfo.data = std::move(outBuffer);
-		outDataInfo.uncompressedAlignment = data.alignments[i];
+		outDataInfo.uncompressedAlignment = inDataInfo.GetAlignment();
 	}
 
 	return true;
@@ -1095,4 +1099,17 @@ std::map<Bundle::ResourceType, std::vector<uint32_t>> Bundle::ListResourceIDsByT
 		entriesByResourceType[e.second.info.resourceType].push_back(e.first);
 	}
 	return entriesByResourceType;
+}
+
+std::vector<Bundle::MemoryType> Bundle::GetMemoryTypes() const
+{
+	std::vector<MemoryType> types;
+	types.reserve(m_platform == PS3 ? 3 : 2);
+
+	types.emplace_back(MemoryType::MainMemory);
+	types.emplace_back(MemoryType::GraphicsSystem);
+	if (m_platform == PS3)
+		types.emplace_back(MemoryType::GraphicsLocal);
+
+	return types;
 }

@@ -1,11 +1,26 @@
 #pragma once
 #include "libbndl_export.h"
-#include <string>
+#include <array>
+#include <iterator>
 #include <map>
-#include <vector>
-#include <mutex>
 #include <memory>
 #include <optional>
+#include <stdint.h>
+#include <string>
+#include <vector>
+#include <version>
+
+#if __cpp_lib_constexpr_memory > 202202L
+#define LIBBNDL_BUFFER_CONSTEXPR constexpr
+#else
+#define LIBBNDL_BUFFER_CONSTEXPR
+#endif
+
+#ifdef __cpp_lib_to_underlying
+#define LIBBNDL_TO_UNDERLYING(x) std::to_underlying(x)
+#else
+#define LIBBNDL_TO_UNDERLYING(x) static_cast<std::underlying_type_t<std::remove_reference_t<decltype(x)>>>(x)
+#endif
 
 namespace binaryio
 {
@@ -173,6 +188,18 @@ namespace libbndl
 		};
 
 
+		enum class MemoryType : uint8_t
+		{
+			MainMemory = 0,
+
+			GraphicsSystem = 1, // PS3
+			Physical = 1, // X360
+			Disposable = 1, // PC
+
+			GraphicsLocal = 2, // PS3
+		};
+
+
 		struct EntryFileBlockData
 		{
 			uint32_t uncompressedSize;
@@ -181,7 +208,7 @@ namespace libbndl
 			std::unique_ptr<uint8_t[]> data;
 		};
 
-		struct EntryDebugInfo
+		struct ResourceDebugInfo
 		{
 			std::string name;
 			std::string typeName;
@@ -209,11 +236,49 @@ namespace libbndl
 		};
 
 
-		struct EntryData
+		class Buffer
 		{
-			std::unique_ptr<std::vector<uint8_t>> fileBlockData[3];
-			uint32_t alignments[3];
-			std::vector<Dependency> dependencies;
+		public:
+			using value_type = uint8_t;
+			using size_type = size_t;
+			using pointer = value_type *;
+			using reference = value_type &;
+			using iterator = value_type *;
+			using const_iterator = const value_type *;
+
+			constexpr Buffer() : m_ptr({}), m_size(0), m_alignment(0) {};
+			Buffer(std::unique_ptr<value_type[]> ptr, size_type size, uint32_t alignment) : m_ptr(std::move(ptr)), m_size(size), m_alignment(alignment) {}
+
+			[[nodiscard]] constexpr size_type GetSize() const noexcept { return m_size; }
+			[[nodiscard]] constexpr uint32_t GetAlignment() const noexcept { return m_alignment; }
+			[[nodiscard]] LIBBNDL_BUFFER_CONSTEXPR pointer GetData() const noexcept { return m_ptr.get(); }
+
+			[[nodiscard]] LIBBNDL_BUFFER_CONSTEXPR iterator begin() const noexcept { return m_ptr.get(); }
+			[[nodiscard]] LIBBNDL_BUFFER_CONSTEXPR iterator end() const noexcept { return m_ptr.get() + m_size; }
+			[[nodiscard]] LIBBNDL_BUFFER_CONSTEXPR const_iterator cbegin() const noexcept { return begin(); }
+			[[nodiscard]] LIBBNDL_BUFFER_CONSTEXPR const_iterator cend() const noexcept { return end(); }
+
+			[[nodiscard]] LIBBNDL_BUFFER_CONSTEXPR bool operator==(nullptr_t) const noexcept { return m_ptr.get() == nullptr; }
+			[[nodiscard]] LIBBNDL_BUFFER_CONSTEXPR reference operator[](size_type idx) const { return m_ptr[idx]; }
+
+		private:
+			std::unique_ptr<value_type[]> m_ptr;
+			size_type m_size;
+			uint32_t m_alignment;
+		};
+
+
+		class Resource
+		{
+		public:
+			Resource(std::array<Buffer, 3> buffers, std::vector<Dependency> dependenices) : m_buffers(std::move(buffers)), m_dependencies(std::move(dependenices)) {}
+
+			[[nodiscard]] constexpr const Buffer &GetBinary(MemoryType block) const { return m_buffers[LIBBNDL_TO_UNDERLYING(block)]; }
+			[[nodiscard]] constexpr const std::vector<Dependency> &GetDependencies() const { return m_dependencies; }
+
+		private:
+			std::array<Buffer, 3> m_buffers;
+			std::vector<Dependency> m_dependencies;
 		};
 
 
@@ -243,29 +308,31 @@ namespace libbndl
 			return m_flags;
 		}
 
-		LIBBNDL_EXPORT std::optional<EntryDebugInfo> GetDebugInfo(const std::string &resourceName) const;
-		LIBBNDL_EXPORT std::optional<EntryDebugInfo> GetDebugInfo(uint32_t resourceID) const;
+		LIBBNDL_EXPORT std::optional<ResourceDebugInfo> GetResourceDebugInfo(const std::string &resourceName) const;
+		LIBBNDL_EXPORT std::optional<ResourceDebugInfo> GetResourceDebugInfo(uint32_t resourceID) const;
 		LIBBNDL_EXPORT std::optional<ResourceType> GetResourceType(const std::string &resourceName) const;
 		LIBBNDL_EXPORT std::optional<ResourceType> GetResourceType(uint32_t resourceID) const;
-		LIBBNDL_EXPORT std::optional<EntryData> GetData(const std::string &resourceName) const;
-		LIBBNDL_EXPORT std::optional<EntryData> GetData(uint32_t resourceID) const;
-		LIBBNDL_EXPORT std::unique_ptr<std::vector<uint8_t>> GetBinary(const std::string &resourceName, uint32_t fileBlock) const;
-		LIBBNDL_EXPORT std::unique_ptr<std::vector<uint8_t>> GetBinary(uint32_t resourceID, uint32_t fileBlock) const;
+		LIBBNDL_EXPORT std::optional<Resource> GetResource(const std::string &resourceName) const;
+		LIBBNDL_EXPORT std::optional<Resource> GetResource(uint32_t resourceID) const;
+		LIBBNDL_EXPORT Buffer GetBinary(const std::string &resourceName, MemoryType fileBlock) const;
+		LIBBNDL_EXPORT Buffer GetBinary(uint32_t resourceID, MemoryType fileBlock) const;
 
-		LIBBNDL_EXPORT bool AddResource(const std::string &resourceName, const EntryData &data, ResourceType resourceType);
-		LIBBNDL_EXPORT bool AddResource(uint32_t resourceID, const EntryData &data, ResourceType resourceType);
-		LIBBNDL_EXPORT bool AddDebugInfo(const std::string &resourceName, const std::string &name, const std::string &type);
-		LIBBNDL_EXPORT bool AddDebugInfo(uint32_t resourceID, const std::string &name, const std::string &type);
+		LIBBNDL_EXPORT bool AddResource(const std::string &resourceName, const Resource &data, ResourceType resourceType);
+		LIBBNDL_EXPORT bool AddResource(uint32_t resourceID, const Resource &data, ResourceType resourceType);
+		LIBBNDL_EXPORT bool AddResourceDebugInfo(const std::string &resourceName, const std::string &name, const std::string &type);
+		LIBBNDL_EXPORT bool AddResourceDebugInfo(uint32_t resourceID, const std::string &name, const std::string &type);
 
-		LIBBNDL_EXPORT bool ReplaceResource(const std::string &resourceName, const EntryData &data);
-		LIBBNDL_EXPORT bool ReplaceResource(uint32_t resourceID, const EntryData &data);
+		LIBBNDL_EXPORT bool ReplaceResource(const std::string &resourceName, const Resource &data);
+		LIBBNDL_EXPORT bool ReplaceResource(uint32_t resourceID, const Resource &data);
 
 		LIBBNDL_EXPORT std::vector<uint32_t> ListResourceIDs() const;
 		LIBBNDL_EXPORT std::map<ResourceType, std::vector<uint32_t>> ListResourceIDsByType() const;
 
+		LIBBNDL_EXPORT std::vector<MemoryType> GetMemoryTypes() const;
+
 	private:
 		std::map<uint32_t, Entry>	m_entries;
-		std::map<uint32_t, EntryDebugInfo> m_debugInfoEntries;
+		std::map<uint32_t, ResourceDebugInfo> m_debugInfoEntries;
 		std::map<uint32_t, std::vector<Dependency>> m_dependencies; // not used in bnd2 due to lazy reading.
 
 		MagicVersion				m_magicVersion;
