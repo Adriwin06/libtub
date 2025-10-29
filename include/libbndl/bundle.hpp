@@ -246,8 +246,9 @@ namespace libbndl
 			using iterator = value_type *;
 			using const_iterator = const value_type *;
 
-			constexpr Buffer() : m_ptr({}), m_size(0), m_alignment(0) {};
+			constexpr Buffer() : m_ptr({}), m_size(0), m_alignment(0) {}
 			Buffer(std::unique_ptr<value_type[]> ptr, size_type size, uint32_t alignment) : m_ptr(std::move(ptr)), m_size(size), m_alignment(alignment) {}
+			Buffer(Buffer &&other) noexcept : m_ptr(std::move(other.m_ptr)), m_size(other.m_size), m_alignment(other.m_alignment) {}
 
 			[[nodiscard]] constexpr size_type GetSize() const noexcept { return m_size; }
 			[[nodiscard]] constexpr uint32_t GetAlignment() const noexcept { return m_alignment; }
@@ -260,6 +261,13 @@ namespace libbndl
 
 			[[nodiscard]] LIBBNDL_BUFFER_CONSTEXPR bool operator==(nullptr_t) const noexcept { return m_ptr.get() == nullptr; }
 			[[nodiscard]] LIBBNDL_BUFFER_CONSTEXPR reference operator[](size_type idx) const { return m_ptr[idx]; }
+
+			void operator=(Buffer &&buffer) noexcept
+			{
+				m_ptr = std::move(buffer.m_ptr);
+				m_size = buffer.m_size;
+				m_alignment = buffer.m_alignment;
+			}
 
 		private:
 			std::unique_ptr<value_type[]> m_ptr;
@@ -275,6 +283,8 @@ namespace libbndl
 
 			[[nodiscard]] constexpr const Buffer &GetBinary(MemoryType block) const { return m_buffers[LIBBNDL_TO_UNDERLYING(block)]; }
 			[[nodiscard]] constexpr const std::vector<Dependency> &GetDependencies() const { return m_dependencies; }
+
+			void ReplaceBinary(MemoryType block, Buffer &&buffer) { m_buffers[LIBBNDL_TO_UNDERLYING(block)] = std::move(buffer); }
 
 		private:
 			std::array<Buffer, 3> m_buffers;
