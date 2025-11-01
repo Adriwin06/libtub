@@ -56,12 +56,12 @@ int main(int argc, char** argv)
 				const auto resourceType = *arch.GetResourceType(resourceID);
 				std::ostringstream name;
 				if (debugInfo)
-					name << debugInfo->name;
+					name << debugInfo->GetName();
 				else
 					name << std::hex << resourceID;
 				std::ostringstream typeName;
 				if (debugInfo)
-					typeName << debugInfo->typeName;
+					typeName << debugInfo->GetTypeName();
 				else
 					typeName << std::hex << resourceType;
 				std::cout << std::left << std::setw(70) << name.str() << std::right << typeName.str() << std::endl;

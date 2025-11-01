@@ -1,7 +1,6 @@
 #pragma once
 #include "libbndl_export.h"
 #include <array>
-#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -22,21 +21,20 @@
 #define LIBBNDL_TO_UNDERLYING(x) static_cast<std::underlying_type_t<std::remove_reference_t<decltype(x)>>>(x)
 #endif
 
-namespace binaryio
-{
-	class BinaryReader;
-	class BinaryWriter;
-}
-
 namespace libbndl
 {
+	namespace Formats
+	{
+		class Base;
+	}
+
 	class Bundle
 	{
 	public:
-		enum MagicVersion
+		enum class MagicVersion
 		{
-			BNDL	= 1,
-			BND2	= 2
+			BNDL = 1,
+			BND2 = 2
 		};
 
 		enum Platform: uint32_t
@@ -200,39 +198,30 @@ namespace libbndl
 		};
 
 
-		struct EntryFileBlockData
+		class ResourceDebugInfo
 		{
-			uint32_t uncompressedSize;
-			uint32_t uncompressedAlignment; // default depending on file type
-			uint32_t compressedSize;
-			std::unique_ptr<uint8_t[]> data;
+		public:
+			constexpr ResourceDebugInfo(std::string name, std::string typeName) : m_name(std::move(name)), m_typeName(std::move(typeName)) {}
+
+			[[nodiscard]] constexpr std::string GetName() const noexcept { return m_name; }
+			[[nodiscard]] constexpr std::string GetTypeName() const noexcept { return m_typeName; }
+
+		private:
+			std::string m_name;
+			std::string m_typeName;
 		};
 
-		struct ResourceDebugInfo
+		class Import
 		{
-			std::string name;
-			std::string typeName;
-		};
+		public:
+			constexpr Import(uint32_t resourceID, uint32_t offset) : m_resourceID(resourceID), m_offset(offset) {}
 
-		struct EntryInfo
-		{
-			uint32_t checksum; // Stored in bundle as 64-bit (8-byte)
+			[[nodiscard]] constexpr uint32_t GetResourceID() const noexcept { return m_resourceID; }
+			[[nodiscard]] constexpr uint32_t GetOffset() const noexcept { return m_offset; }
 
-			uint32_t dependenciesOffset;
-			ResourceType resourceType;
-			uint16_t numberOfDependencies;
-		};
-
-		struct Dependency
-		{
-			uint32_t resourceID;
-			uint32_t internalOffset;
-		};
-
-		struct Entry
-		{
-			EntryInfo info;
-			EntryFileBlockData fileBlockData[3];
+		private:
+			uint32_t m_resourceID;
+			uint32_t m_offset;
 		};
 
 
@@ -279,29 +268,30 @@ namespace libbndl
 		class Resource
 		{
 		public:
-			Resource(std::array<Buffer, 3> buffers, std::vector<Dependency> dependenices) : m_buffers(std::move(buffers)), m_dependencies(std::move(dependenices)) {}
+			Resource(std::array<Buffer, 3> buffers, std::vector<Import> imports) : m_buffers(std::move(buffers)), m_imports(std::move(imports)) {}
 
 			[[nodiscard]] constexpr const Buffer &GetBinary(MemoryType block) const { return m_buffers[LIBBNDL_TO_UNDERLYING(block)]; }
-			[[nodiscard]] constexpr const std::vector<Dependency> &GetDependencies() const { return m_dependencies; }
+			[[nodiscard]] constexpr const std::vector<Import> &GetImports() const { return m_imports; }
 
 			void ReplaceBinary(MemoryType block, Buffer &&buffer) { m_buffers[LIBBNDL_TO_UNDERLYING(block)] = std::move(buffer); }
 
 		private:
 			std::array<Buffer, 3> m_buffers;
-			std::vector<Dependency> m_dependencies;
+			std::vector<Import> m_imports;
 		};
 
 
-		LIBBNDL_EXPORT Bundle() = default;
+		LIBBNDL_EXPORT Bundle();
 		LIBBNDL_EXPORT Bundle(MagicVersion magicVersion, uint32_t revisionNumber, Platform platform, Flags flags); // For creating new bundles
+		LIBBNDL_EXPORT ~Bundle();
 
 		LIBBNDL_EXPORT bool Load(const std::string &name);
 		LIBBNDL_EXPORT bool Save(const std::string &name);
 
-		LIBBNDL_EXPORT [[nodiscard]] constexpr MagicVersion GetMagicVersion() const { return m_magicVersion; }
-		LIBBNDL_EXPORT [[nodiscard]] constexpr uint32_t GetRevisionNumber() const { return m_revisionNumber; }
-		LIBBNDL_EXPORT [[nodiscard]] constexpr Platform GetPlatform() const { return m_platform; }
-		LIBBNDL_EXPORT [[nodiscard]] constexpr Flags GetFlags() const { return m_flags; }
+		LIBBNDL_EXPORT [[nodiscard]] MagicVersion GetMagicVersion() const;
+		LIBBNDL_EXPORT [[nodiscard]] uint32_t GetRevisionNumber() const;
+		LIBBNDL_EXPORT [[nodiscard]] Platform GetPlatform() const;
+		LIBBNDL_EXPORT [[nodiscard]] Flags GetFlags() const;
 
 		LIBBNDL_EXPORT [[nodiscard]] std::optional<ResourceDebugInfo> GetResourceDebugInfo(const std::string &resourceName) const;
 		LIBBNDL_EXPORT [[nodiscard]] std::optional<ResourceDebugInfo> GetResourceDebugInfo(uint32_t resourceID) const;
@@ -326,23 +316,8 @@ namespace libbndl
 		LIBBNDL_EXPORT [[nodiscard]] std::vector<MemoryType> GetMemoryTypes() const;
 
 	private:
-		std::map<uint32_t, Entry>	m_entries;
-		std::map<uint32_t, ResourceDebugInfo> m_debugInfoEntries;
-		std::map<uint32_t, std::vector<Dependency>> m_dependencies; // not used in bnd2 due to lazy reading.
+		std::unique_ptr<Formats::Base> m_impl;
 
-		MagicVersion				m_magicVersion;
-		uint32_t					m_revisionNumber;
-		Platform					m_platform;
-		Flags						m_flags;
-
-		bool LoadBND2(binaryio::BinaryReader &reader);
-		bool LoadBNDL(binaryio::BinaryReader &reader);
-		bool SaveBND2(binaryio::BinaryWriter &writer);
-		bool SaveBNDL(binaryio::BinaryWriter &writer);
-		[[nodiscard]] int8_t MapBNDLBlockToBND2(uint8_t block) const;
 		[[nodiscard]] uint32_t HashResourceName(std::string resourceName) const;
-
-		static [[nodiscard]] Dependency ReadDependency(binaryio::BinaryReader &reader);
-		static void WriteDependency(binaryio::BinaryWriter &writer, const Dependency &dependency);
 	};
 }
