@@ -5,9 +5,9 @@
 using namespace libbndl;
 using namespace libbndl::Formats;
 
-Base::Base(uint32_t revisionNumber, Bundle::Platform platform, Bundle::Flags flags)
+Base::Base(uint32_t version, Bundle::Platform platform, Bundle::Flags flags)
 {
-	m_revisionNumber = revisionNumber;
+	m_version = version;
 	m_platform = platform;
 	m_flags = flags;
 }
@@ -27,10 +27,10 @@ std::optional<Bundle::ResourceType> Base::GetResourceType(uint32_t resourceID) c
 	if (it == m_entries.end())
 		return {};
 
-	return it->second.info.resourceType;
+	return it->second.resourceType;
 }
 
-Bundle::Buffer Base::GetBinary(uint32_t resourceID, Bundle::MemoryType fileBlock) const
+Bundle::Buffer Base::GetBinary(uint32_t resourceID, Bundle::MemoryType memoryType) const
 {
 	const auto it = m_entries.find(resourceID);
 	if (it == m_entries.end())
@@ -38,7 +38,7 @@ Bundle::Buffer Base::GetBinary(uint32_t resourceID, Bundle::MemoryType fileBlock
 
 	const auto &e = it->second;
 
-	const auto &dataInfo = e.fileBlockData[LIBBNDL_TO_UNDERLYING(fileBlock)];
+	const auto &dataInfo = e.descriptors[LIBBNDL_TO_UNDERLYING(memoryType)];
 
 	if (dataInfo.data == nullptr)
 		return {};
@@ -72,8 +72,8 @@ bool Base::AddResource(uint32_t resourceID, const Bundle::Resource &resource, Bu
 	if (it != m_entries.end() || resource.GetImports().size() > std::numeric_limits<uint16_t>::max())
 		return false;
 
-	Entry &e = m_entries[resourceID];
-	e.info.resourceType = resourceType;
+	auto &e = m_entries[resourceID];
+	e.resourceType = resourceType;
 
 	return ReplaceResource(resourceID, resource);
 }
@@ -98,16 +98,16 @@ bool Base::ReplaceResource(uint32_t resourceID, const Bundle::Resource &resource
 	if (it == m_entries.end() || imports.size() > std::numeric_limits<uint16_t>::max())
 		return false;
 
-	Entry &e = it->second;
+	auto &e = it->second;
 
-	e.info.checksum = 0;
-	e.info.importsOffset = 0;
-	e.info.numberOfImports = 0;
+	e.importHash = 0;
+	e.importOffset = 0;
+	e.importCount = 0;
 
 	for (const auto &memoryType : GetMemoryTypes())
 	{
 		const auto &inDataInfo = resource.GetBinary(memoryType);
-		auto &outDataInfo = e.fileBlockData[LIBBNDL_TO_UNDERLYING(memoryType)];
+		auto &outDataInfo = e.descriptors[LIBBNDL_TO_UNDERLYING(memoryType)];
 
 		if (inDataInfo == nullptr)
 		{
@@ -121,18 +121,13 @@ bool Base::ReplaceResource(uint32_t resourceID, const Bundle::Resource &resource
 		size_t inSize;
 		std::unique_ptr<uint8_t[]> outBuffer;
 
-		if (memoryType == Bundle::MemoryType::MainMemory)
-		{
-			//
-		}
-
 		if (AppendsImportsToResource() && memoryType == Bundle::MemoryType::MainMemory && !imports.empty())
 		{
 			binaryio::BinaryWriter writer;
 			for (const auto &import : imports)
 			{
 				WriteImport(writer, import);
-				e.info.checksum &= import.GetResourceID();
+				e.importHash &= import.GetResourceID();
 			}
 			const auto depSize = writer.GetSize();
 			auto depStream = writer.GetStream();
@@ -145,8 +140,8 @@ bool Base::ReplaceResource(uint32_t resourceID, const Bundle::Resource &resource
 			std::memcpy(inBuffer.get(), inDataInfo.GetData(), inDataInfoSize);
 			std::memcpy(inBuffer.get() + inDataInfoSize, depStream.view().data(), depSize);
 
-			e.info.importsOffset = static_cast<uint32_t>(inSize);
-			e.info.numberOfImports = static_cast<uint16_t>(imports.size());
+			e.importOffset = static_cast<uint32_t>(inSize);
+			e.importCount = static_cast<uint16_t>(imports.size());
 		}
 		else
 		{
@@ -204,7 +199,7 @@ std::map<Bundle::ResourceType, std::vector<uint32_t>> Base::GetResourceIDsByType
 	std::map<Bundle::ResourceType, std::vector<uint32_t>> entriesByResourceType;
 	for (const auto &e : m_entries)
 	{
-		entriesByResourceType[e.second.info.resourceType].push_back(e.first);
+		entriesByResourceType[e.second.resourceType].push_back(e.first);
 	}
 	return entriesByResourceType;
 }

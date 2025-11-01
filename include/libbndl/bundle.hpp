@@ -31,7 +31,7 @@ namespace libbndl
 	class Bundle
 	{
 	public:
-		enum class MagicVersion
+		enum class MagicNumber
 		{
 			BNDL = 1,
 			BND2 = 2
@@ -282,14 +282,14 @@ namespace libbndl
 
 
 		LIBBNDL_EXPORT Bundle();
-		LIBBNDL_EXPORT Bundle(MagicVersion magicVersion, uint32_t revisionNumber, Platform platform, Flags flags); // For creating new bundles
+		LIBBNDL_EXPORT Bundle(MagicNumber magicNumber, uint32_t version, Platform platform, Flags flags); // For creating new bundles
 		LIBBNDL_EXPORT ~Bundle();
 
 		LIBBNDL_EXPORT bool Load(const std::string &name);
 		LIBBNDL_EXPORT bool Save(const std::string &name);
 
-		LIBBNDL_EXPORT [[nodiscard]] MagicVersion GetMagicVersion() const;
-		LIBBNDL_EXPORT [[nodiscard]] uint32_t GetRevisionNumber() const;
+		LIBBNDL_EXPORT [[nodiscard]] MagicNumber GetMagicNumber() const;
+		LIBBNDL_EXPORT [[nodiscard]] uint32_t GetVersion() const;
 		LIBBNDL_EXPORT [[nodiscard]] Platform GetPlatform() const;
 		LIBBNDL_EXPORT [[nodiscard]] Flags GetFlags() const;
 
@@ -299,8 +299,8 @@ namespace libbndl
 		LIBBNDL_EXPORT [[nodiscard]] std::optional<ResourceType> GetResourceType(uint32_t resourceID) const;
 		LIBBNDL_EXPORT [[nodiscard]] std::optional<Resource> GetResource(const std::string &resourceName) const;
 		LIBBNDL_EXPORT [[nodiscard]] std::optional<Resource> GetResource(uint32_t resourceID) const;
-		LIBBNDL_EXPORT [[nodiscard]] Buffer GetBinary(const std::string &resourceName, MemoryType fileBlock) const;
-		LIBBNDL_EXPORT [[nodiscard]] Buffer GetBinary(uint32_t resourceID, MemoryType fileBlock) const;
+		LIBBNDL_EXPORT [[nodiscard]] Buffer GetBinary(const std::string &resourceName, MemoryType memoryType) const;
+		LIBBNDL_EXPORT [[nodiscard]] Buffer GetBinary(uint32_t resourceID, MemoryType memoryType) const;
 
 		LIBBNDL_EXPORT bool AddResource(const std::string &resourceName, const Resource &data, ResourceType resourceType);
 		LIBBNDL_EXPORT bool AddResource(uint32_t resourceID, const Resource &data, ResourceType resourceType);

@@ -14,15 +14,15 @@ using namespace libbndl;
 
 Bundle::Bundle() = default;
 
-Bundle::Bundle(MagicVersion magicVersion, uint32_t revisionNumber, Platform platform, Flags flags)
+Bundle::Bundle(MagicNumber magicNumber, uint32_t version, Platform platform, Flags flags)
 {
-	switch (magicVersion)
+	switch (magicNumber)
 	{
-	case MagicVersion::BNDL:
-		m_impl = std::make_unique<Formats::BNDL>(revisionNumber, platform, flags);
+	case MagicNumber::BNDL:
+		m_impl = std::make_unique<Formats::BNDL>(version, platform, flags);
 		break;
-	case MagicVersion::BND2:
-		m_impl = std::make_unique<Formats::BND2>(revisionNumber, platform, flags);
+	case MagicNumber::BND2:
+		m_impl = std::make_unique<Formats::BND2>(version, platform, flags);
 		break;
 	}
 }
@@ -79,14 +79,14 @@ bool Bundle::Save(const std::string &name)
 	return true;
 }
 
-Bundle::MagicVersion Bundle::GetMagicVersion() const
+Bundle::MagicNumber Bundle::GetMagicNumber() const
 {
-	return m_impl->GetMagicVersion();
+	return m_impl->GetMagicNumber();
 }
 
-uint32_t Bundle::GetRevisionNumber() const
+uint32_t Bundle::GetVersion() const
 {
-	return m_impl->GetRevisionNumber();
+	return m_impl->GetVersion();
 }
 
 Bundle::Platform Bundle::GetPlatform() const
@@ -115,14 +115,14 @@ std::optional<Bundle::Resource> Bundle::GetResource(uint32_t resourceID) const
 	return m_impl->GetResource(resourceID);
 }
 
-Bundle::Buffer Bundle::GetBinary(const std::string &resourceName, MemoryType fileBlock) const
+Bundle::Buffer Bundle::GetBinary(const std::string &resourceName, MemoryType memoryType) const
 {
-	return GetBinary(HashResourceName(resourceName), fileBlock);
+	return GetBinary(HashResourceName(resourceName), memoryType);
 }
 
-Bundle::Buffer Bundle::GetBinary(uint32_t resourceID, MemoryType fileBlock) const
+Bundle::Buffer Bundle::GetBinary(uint32_t resourceID, MemoryType memoryType) const
 {
-	return m_impl->GetBinary(resourceID, fileBlock);
+	return m_impl->GetBinary(resourceID, memoryType);
 }
 
 std::optional<Bundle::ResourceDebugInfo> Bundle::GetResourceDebugInfo(const std::string &resourceName) const

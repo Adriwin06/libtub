@@ -27,15 +27,15 @@ static inline unsigned long BitScanReverse(unsigned long input)
 
 bool BND2::Load(binaryio::BinaryReader &reader)
 {
-	m_revisionNumber = reader.Read<uint32_t>();
+	m_version = reader.Read<uint32_t>();
 
 	m_platform = reader.Read<Bundle::Platform>();
 	reader.SetEndian(m_platform != Bundle::PC ? std::endian::big : std::endian::little);
 
 	if (reader.GetEndian() != std::endian::native)
-		m_revisionNumber = (m_revisionNumber << 24) | (m_revisionNumber << 8 & 0xff0000) | (m_revisionNumber >> 8 & 0xff00) | (m_revisionNumber >> 24);
+		m_version = (m_version << 24) | (m_version << 8 & 0xff0000) | (m_version >> 8 & 0xff00) | (m_version >> 24);
 	// Little sanity check.
-	if (m_revisionNumber != 2)
+	if (m_version != 2)
 		return false;
 
 	const auto rstOffset = reader.Read<uint32_t>();
@@ -63,43 +63,43 @@ bool BND2::Load(binaryio::BinaryReader &reader)
 		auto resourceID = static_cast<uint32_t>(reader.Read<uint64_t>());
 		assert(resourceID != 0);
 		auto &e = m_entries[resourceID];
-		e.info.checksum = static_cast<uint32_t>(reader.Read<uint64_t>());
+		e.importHash = static_cast<uint32_t>(reader.Read<uint64_t>());
 
 		// The uncompressed sizes have a high nibble that varies depending on the resource type.
 		const auto uncompSize0 = reader.Read<uint32_t>();
-		e.fileBlockData[0].uncompressedSize = uncompSize0 & ~(0xFU << 28);
-		e.fileBlockData[0].uncompressedAlignment = 1 << (uncompSize0 >> 28);
+		e.descriptors[0].uncompressedSize = uncompSize0 & ~(0xFU << 28);
+		e.descriptors[0].uncompressedAlignment = 1 << (uncompSize0 >> 28);
 		const auto uncompSize1 = reader.Read<uint32_t>();
-		e.fileBlockData[1].uncompressedSize = uncompSize1 & ~(0xFU << 28);
-		e.fileBlockData[1].uncompressedAlignment = 1 << (uncompSize1 >> 28);
+		e.descriptors[1].uncompressedSize = uncompSize1 & ~(0xFU << 28);
+		e.descriptors[1].uncompressedAlignment = 1 << (uncompSize1 >> 28);
 		const auto uncompSize2 = reader.Read<uint32_t>();
-		e.fileBlockData[2].uncompressedSize = uncompSize2 & ~(0xFU << 28);
-		e.fileBlockData[2].uncompressedAlignment = 1 << (uncompSize2 >> 28);
+		e.descriptors[2].uncompressedSize = uncompSize2 & ~(0xFU << 28);
+		e.descriptors[2].uncompressedAlignment = 1 << (uncompSize2 >> 28);
 
-		e.fileBlockData[0].compressedSize = reader.Read<uint32_t>();
-		e.fileBlockData[1].compressedSize = reader.Read<uint32_t>();
-		e.fileBlockData[2].compressedSize = reader.Read<uint32_t>();
+		e.descriptors[0].compressedSize = reader.Read<uint32_t>();
+		e.descriptors[1].compressedSize = reader.Read<uint32_t>();
+		e.descriptors[2].compressedSize = reader.Read<uint32_t>();
 
 		auto dataReader = reader.Copy();
 		for (auto j = 0; j < 3; j++)
 		{
 			dataReader.Seek(fileBlockOffsets[j] + reader.Read<uint32_t>()); // Read offset
 
-			auto &dataInfo = e.fileBlockData[j];
+			auto &descriptor = e.descriptors[j];
 
-			const auto readSize = (m_flags & Bundle::Compressed) ? dataInfo.compressedSize : dataInfo.uncompressedSize;
+			const auto readSize = (m_flags & Bundle::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
 			if (readSize == 0)
 			{
-				dataInfo.data = nullptr;
+				descriptor.data = nullptr;
 				continue;
 			}
 
-			dataInfo.data = std::unique_ptr<uint8_t[]>(dataReader.Read<uint8_t *>(readSize));
+			descriptor.data = std::unique_ptr<uint8_t[]>(dataReader.Read<uint8_t *>(readSize));
 		}
 
-		e.info.importsOffset = reader.Read<uint32_t>();
-		e.info.resourceType = reader.Read<Bundle::ResourceType>();
-		e.info.numberOfImports = reader.Read<uint16_t>();
+		e.importOffset = reader.Read<uint32_t>();
+		e.resourceType = reader.Read<Bundle::ResourceType>();
+		e.importCount = reader.Read<uint16_t>();
 
 		reader.Seek(2, std::ios::cur); // Padding
 	}
@@ -188,21 +188,21 @@ bool BND2::Save(binaryio::BinaryWriter &writer)
 
 		const auto &e = entryIter->second;
 
-		writer.Write<uint64_t>(e.info.checksum);
+		writer.Write<uint64_t>(e.importHash);
 
-		for (auto &dataInfo : e.fileBlockData)
-			writer.Write(dataInfo.uncompressedSize | (BitScanReverse(dataInfo.uncompressedAlignment) << 28));
-		for (auto &dataInfo : e.fileBlockData)
-			writer.Write(dataInfo.compressedSize);
+		for (auto &descriptor : e.descriptors)
+			writer.Write(descriptor.uncompressedSize | (BitScanReverse(descriptor.uncompressedAlignment) << 28));
+		for (auto &descriptor : e.descriptors)
+			writer.Write(descriptor.compressedSize);
 		for (auto j = 0; j < 3; j++)
 		{
 			entryDataPointerPos[i][j] = writer.GetOffset();
 			writer.Seek(4, std::ios::cur);
 		}
 
-		writer.Write(e.info.importsOffset);
-		writer.Write(e.info.resourceType);
-		writer.Write(e.info.numberOfImports);
+		writer.Write(e.importOffset);
+		writer.Write(e.resourceType);
+		writer.Write(e.importCount);
 
 		writer.Seek(2, std::ios::cur); // padding
 
@@ -220,13 +220,13 @@ bool BND2::Save(binaryio::BinaryWriter &writer)
 		{
 			const auto &e = entryIter->second;
 
-			const auto &dataInfo = e.fileBlockData[i];
-			const auto readSize = (m_flags & Bundle::Compressed) ? dataInfo.compressedSize : dataInfo.uncompressedSize;
+			const auto &descriptor = e.descriptors[i];
+			const auto readSize = (m_flags & Bundle::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
 
 			if (readSize > 0)
 			{
 				writer.VisitAndWrite<uint32_t>(entryDataPointerPos[j][i], writer.GetOffset32() - blockStart);
-				writer.Write(dataInfo.data.get(), readSize);
+				writer.Write(descriptor.data.get(), readSize);
 				writer.Align((i != 0 && j != m_entries.size() - 1) ? 0x80 : 16);
 			}
 
@@ -251,13 +251,13 @@ std::optional<Bundle::Resource> BND2::GetResource(uint32_t resourceID) const
 		buffers[LIBBNDL_TO_UNDERLYING(memoryType)] = GetBinary(resourceID, memoryType);
 
 	std::vector<Bundle::Import> imports;
-	const auto numImports = it->second.info.numberOfImports;
+	const auto numImports = it->second.importCount;
 	if (numImports > 0)
 	{
 		imports.reserve(numImports);
 
 		binaryio::BinaryReader reader(buffers[0], m_platform != Bundle::PC ? std::endian::big : std::endian::little);
-		reader.Seek(it->second.info.importsOffset);
+		reader.Seek(it->second.importOffset);
 		for (auto i = 0U; i < numImports; i++)
 		{
 			const auto &importEntry = ReadImport(reader);

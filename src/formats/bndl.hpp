@@ -13,7 +13,7 @@ namespace libbndl
 			virtual bool Load(binaryio::BinaryReader &reader) override;
 			virtual bool Save(binaryio::BinaryWriter &reader) override;
 
-			[[nodiscard]] virtual constexpr Bundle::MagicVersion GetMagicVersion() const override { return Bundle::MagicVersion::BNDL; }
+			[[nodiscard]] virtual constexpr Bundle::MagicNumber GetMagicNumber() const override { return Bundle::MagicNumber::BNDL; }
 
 			[[nodiscard]] virtual std::optional<Bundle::Resource> GetResource(uint32_t resourceID) const override;
 

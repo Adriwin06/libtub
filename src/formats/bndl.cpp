@@ -23,8 +23,8 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	if (m_platform == 0)
 		return false;
 
-	m_revisionNumber = reader.Read<uint32_t>();
-	if (m_revisionNumber < 3 || m_revisionNumber > 5)
+	m_version = reader.Read<uint32_t>();
+	if (m_version < 3 || m_version > 5)
 		return false;
 
 	const auto numEntries = reader.Read<uint32_t>();
@@ -55,11 +55,11 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	auto compressed = 0U;
 	auto uncompInfoOffset = 0U;
 
-	if (m_revisionNumber >= 4)
+	if (m_version >= 4)
 	{
-		compressed = reader.Read<uint32_t>();
+		compressed = reader.Read<uint32_t>(); // flags but compression is the only valid one
 		if (compressed)
-			m_flags = Bundle::Compressed; // TODO
+			m_flags = Bundle::Compressed;
 		else
 			m_flags = static_cast<Bundle::Flags>(0);
 
@@ -67,7 +67,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 		uncompInfoOffset = reader.Read<uint32_t>();
 	}
 
-	if (m_revisionNumber >= 5)
+	if (m_version >= 5)
 	{
 		reader.Skip<uint32_t>(); // main memory alignment
 		reader.Skip<uint32_t>(); // graphics memory alignment
@@ -87,9 +87,9 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	{
 		auto &e = m_entries[resourceID];
 
-		reader.Skip<uint32_t>(); // unknown mem stuff
-		e.info.importsOffset = reader.Read<uint32_t>();
-		e.info.resourceType = reader.Read<Bundle::ResourceType>();
+		reader.Skip<uint32_t>(); // runtime-only memory variable
+		e.importOffset = reader.Read<uint32_t>();
+		e.resourceType = reader.Read<Bundle::ResourceType>();
 
 		if (compressed)
 		{
@@ -103,7 +103,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 				}
 				else
 				{
-					e.fileBlockData[mappedBlock].compressedSize = reader.Read<uint32_t>();
+					e.descriptors[mappedBlock].compressedSize = reader.Read<uint32_t>();
 					reader.Skip<uint32_t>(); // alignment
 				}
 			}
@@ -120,8 +120,8 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 				}
 				else
 				{
-					e.fileBlockData[mappedBlock].uncompressedSize = reader.Read<uint32_t>();
-					e.fileBlockData[mappedBlock].uncompressedAlignment = reader.Read<uint32_t>();
+					e.descriptors[mappedBlock].uncompressedSize = reader.Read<uint32_t>();
+					e.descriptors[mappedBlock].uncompressedAlignment = reader.Read<uint32_t>();
 				}
 			}
 		}
@@ -143,18 +143,18 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 				continue;
 			}
 
-			auto &dataInfo = e.fileBlockData[mappedBlock];
+			auto &descriptor = e.descriptors[mappedBlock];
 
-			const auto readSize = compressed ? dataInfo.compressedSize : dataInfo.uncompressedSize;
+			const auto readSize = compressed ? descriptor.compressedSize : descriptor.uncompressedSize;
 			if (readSize == 0)
 			{
-				dataInfo.data = nullptr;
+				descriptor.data = nullptr;
 				continue;
 			}
 
 			dataReader.Seek(readOffset); // Read offset
 
-			dataInfo.data = std::unique_ptr<uint8_t[]>(dataReader.Read<uint8_t *>(readSize));
+			descriptor.data = std::unique_ptr<uint8_t[]>(dataReader.Read<uint8_t *>(readSize));
 		}
 
 		reader.Seek(0x4 * blocks, std::ios::cur); // memory address stuff
@@ -177,8 +177,8 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 				}
 				else
 				{
-					e.fileBlockData[mappedBlock].uncompressedSize = reader.Read<uint32_t>();
-					e.fileBlockData[mappedBlock].uncompressedAlignment = reader.Read<uint32_t>();
+					e.descriptors[mappedBlock].uncompressedSize = reader.Read<uint32_t>();
+					e.descriptors[mappedBlock].uncompressedAlignment = reader.Read<uint32_t>();
 				}
 			}
 		}
@@ -187,14 +187,14 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	for (const auto resourceID : resourceIDs)
 	{
 		auto &e = m_entries[resourceID];
-		const auto depOffset = e.info.importsOffset;
+		const auto depOffset = e.importOffset;
 		if (depOffset == 0)
 			continue;
 
 		reader.Seek(depOffset);
-		e.info.numberOfImports = static_cast<uint16_t>(reader.Read<uint32_t>());
+		e.importCount = static_cast<uint16_t>(reader.Read<uint32_t>());
 		reader.Verify<uint32_t>(0);
-		for (auto i = 0U; i < e.info.numberOfImports; i++)
+		for (auto i = 0U; i < e.importCount; i++)
 			m_imports[resourceID].emplace_back(ReadImport(reader));
 	}
 
@@ -235,13 +235,13 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 
 bool BNDL::Save(binaryio::BinaryWriter &writer)
 {
-	if (m_revisionNumber <= 3 && (m_flags & Bundle::Compressed) != 0)
+	if (m_version <= 3 && (m_flags & Bundle::Compressed) != 0)
 		return false; // Invalid combination
 
 	writer.SetEndian(m_platform != Bundle::PC ? std::endian::big : std::endian::little);
 
 	writer.Write("bndl", 4);
-	writer.Write<uint32_t>(m_revisionNumber);
+	writer.Write<uint32_t>(m_version);
 
 	const bool writeDebugData = !m_debugInfoEntries.empty() && (m_flags & Bundle::Compressed) == 0; // TODO: is the compressed check accurate?
 	auto entryCount = static_cast<uint32_t>(m_entries.size());
@@ -268,7 +268,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 
 	for (auto i = 0; i < blocks; i++)
 	{
-		writer.Write<uint32_t>(0); // memory addresses - unsupported for now.
+		writer.Write<uint32_t>(0); // memory addresses
 	}
 
 	auto idListPointerPos = writer.GetOffset();
@@ -286,7 +286,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 
 	size_t uncompInfoBlockPointerPos = 0;
 
-	if (m_revisionNumber >= 4)
+	if (m_version >= 4)
 	{
 		writer.Write<uint32_t>(m_flags & Bundle::Compressed);
 		writer.Write<uint32_t>((m_flags & Bundle::Compressed) ? entryCount : 0);
@@ -294,7 +294,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 		writer.Write<uint32_t>(0); // will write later, but only if needed
 	}
 
-	if (m_revisionNumber >= 5)
+	if (m_version >= 5)
 	{
 		writer.Write<uint32_t>(0); // Main memory alignment. Setting this to 0 so we don't need to deal with memory addresses.
 		writer.Write<uint32_t>(0); // Graphics memory alignment.
@@ -340,13 +340,13 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 		const auto dataSize = data.size();
 
 		auto &e = m_entries[0xFFFFFFFF]; // HACK
-		e.info.resourceType = Bundle::TextFile;
+		e.resourceType = Bundle::TextFile;
 
-		e.fileBlockData[0].data = std::make_unique_for_overwrite<uint8_t[]>(dataSize);
-		std::memcpy(e.fileBlockData[0].data.get(), data.data(), dataSize);
+		e.descriptors[0].data = std::make_unique_for_overwrite<uint8_t[]>(dataSize);
+		std::memcpy(e.descriptors[0].data.get(), data.data(), dataSize);
 
-		e.fileBlockData[0].uncompressedSize = static_cast<uint32_t>(dataSize);
-		e.fileBlockData[0].uncompressedAlignment = 4;
+		e.descriptors[0].uncompressedSize = static_cast<uint32_t>(dataSize);
+		e.descriptors[0].uncompressedAlignment = 4;
 	}
 
 	// ID TABLE
@@ -367,7 +367,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 		posHelper.importPointerPos = writer.GetOffset();
 		writer.Write<uint32_t>(0);
 
-		writer.Write(entry.second.info.resourceType);
+		writer.Write(entry.second.resourceType);
 
 		for (uint8_t i = 0; i < blocks; i++)
 		{
@@ -379,10 +379,10 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 			}
 			else
 			{
-				const auto &blockData = entry.second.fileBlockData[mappedBlock];
-				const auto size = (m_flags & Bundle::Compressed) ? blockData.compressedSize : blockData.uncompressedSize;
+				const auto &descriptor = entry.second.descriptors[mappedBlock];
+				const auto size = (m_flags & Bundle::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
 				writer.Write<uint32_t>(size);
-				writer.Write<uint32_t>((size == 0) ? 1 : blockData.uncompressedAlignment);
+				writer.Write<uint32_t>((size == 0) ? 1 : descriptor.uncompressedAlignment);
 			}
 		}
 
@@ -396,7 +396,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 			writer.Write<uint32_t>(1); // constant
 		}
 
-		// Memory stuff - not supported for now
+		// Memory stuff
 		for (auto i = 0; i < blocks; i++)
 			writer.Write<uint32_t>(0);
 	}
@@ -417,9 +417,9 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 				}
 				else
 				{
-					const auto &blockData = entry.second.fileBlockData[mappedBlock];
-					writer.Write<uint32_t>(blockData.uncompressedSize);
-					writer.Write<uint32_t>((blockData.uncompressedSize == 0) ? 1 : blockData.uncompressedAlignment);
+					const auto &descriptor = entry.second.descriptors[mappedBlock];
+					writer.Write<uint32_t>(descriptor.uncompressedSize);
+					writer.Write<uint32_t>((descriptor.uncompressedSize == 0) ? 1 : descriptor.uncompressedAlignment);
 				}
 			}
 		}
@@ -454,13 +454,13 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 		{
 			const auto &e = entry.second;
 
-			const auto &dataInfo = e.fileBlockData[i];
-			const auto readSize = (m_flags & Bundle::Compressed) ? dataInfo.compressedSize : dataInfo.uncompressedSize;
+			const auto &descriptor = e.descriptors[i];
+			const auto readSize = (m_flags & Bundle::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
 
 			if (readSize > 0)
 			{
 				writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first).dataBlockPointerPos[i], writer.GetOffset32() - blockStartOffset);
-				writer.Write(dataInfo.data.get(), readSize);
+				writer.Write(descriptor.data.get(), readSize);
 			}
 		}
 
@@ -514,7 +514,7 @@ std::optional<Bundle::Resource> BNDL::GetResource(uint32_t resourceID) const
 		buffers[LIBBNDL_TO_UNDERLYING(memoryType)] = GetBinary(resourceID, memoryType);
 
 	std::vector<Bundle::Import> imports;
-	if (it->second.info.numberOfImports > 0)
+	if (it->second.importCount > 0)
 	{
 		const auto &importEntries = m_imports.at(resourceID);
 		for (const auto &importEntry : importEntries)
