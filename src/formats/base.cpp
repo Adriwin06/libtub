@@ -207,11 +207,11 @@ std::map<Bundle::ResourceType, std::vector<uint32_t>> Base::GetResourceIDsByType
 std::vector<Bundle::MemoryType> Base::GetMemoryTypes() const
 {
 	std::vector<Bundle::MemoryType> types;
-	types.reserve(m_platform == Bundle::PS3 ? 3 : 2);
+	types.reserve(m_platform == Bundle::Platform::PS3 ? 3 : 2);
 
 	types.emplace_back(Bundle::MemoryType::MainMemory);
 	types.emplace_back(Bundle::MemoryType::GraphicsSystem);
-	if (m_platform == Bundle::PS3)
+	if (m_platform == Bundle::Platform::PS3)
 		types.emplace_back(Bundle::MemoryType::GraphicsLocal);
 
 	return types;

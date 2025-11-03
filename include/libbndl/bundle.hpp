@@ -31,13 +31,13 @@ namespace libbndl
 	class Bundle
 	{
 	public:
-		enum class MagicNumber
+		enum class MagicNumber : uint8_t
 		{
 			BNDL = 1,
 			BND2 = 2
 		};
 
-		enum Platform: uint32_t
+		enum class Platform: uint32_t
 		{
 			PC = 1, // (or PS4/XB1)
 			Xbox360 = 2,
@@ -47,8 +47,8 @@ namespace libbndl
 		enum Flags: uint32_t
 		{
 			Compressed = 1,
-			UnusedFlag1 = 2, // Always set.
-			UnusedFlag2 = 4, // Always set.
+			MainMemOptimised = 2, // Always set.
+			GraphicsMemOptimised = 4, // Always set.
 			HasResourceStringTable = 8
 		};
 

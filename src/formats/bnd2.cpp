@@ -38,7 +38,7 @@ bool BND2::Load(binaryio::BinaryReader &reader)
 		return false;
 
 	m_platform = reader.Read<Bundle::Platform>();
-	if (m_platform != Bundle::PC && m_platform != Bundle::Xbox360 && m_platform != Bundle::PS3)
+	if (m_platform != Bundle::Platform::PC && m_platform != Bundle::Platform::Xbox360 && m_platform != Bundle::Platform::PS3)
 		return false;
 
 	const auto rstOffset = reader.Read<uint32_t>();
@@ -132,7 +132,7 @@ bool BND2::Load(binaryio::BinaryReader &reader)
 bool BND2::Save(binaryio::BinaryWriter &writer)
 {
 	writer.Write("bnd2", 4);
-	writer.SetEndian(m_platform != Bundle::PC ? std::endian::big : std::endian::little);
+	writer.SetEndian(m_platform != Bundle::Platform::PC ? std::endian::big : std::endian::little);
 
 	writer.Write<uint32_t>(m_version);
 	writer.Write(m_platform);
@@ -261,7 +261,7 @@ std::optional<Bundle::Resource> BND2::GetResource(uint32_t resourceID) const
 	{
 		imports.reserve(numImports);
 
-		binaryio::BinaryReader reader(buffers[0], m_platform != Bundle::PC ? std::endian::big : std::endian::little);
+		binaryio::BinaryReader reader(buffers[0], m_platform != Bundle::Platform::PC ? std::endian::big : std::endian::little);
 		reader.Seek(it->second.importOffset);
 		for (auto i = 0U; i < numImports; i++)
 		{

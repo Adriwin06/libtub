@@ -23,21 +23,21 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	{
 		platformReader.Seek(offset);
 		const auto platform = platformReader.Read<Bundle::Platform>();
-		if (platform == Bundle::PC || platform == Bundle::Xbox360 || platform == Bundle::PS3)
+		if (platform == Bundle::Platform::PC || platform == Bundle::Platform::Xbox360 || platform == Bundle::Platform::PS3)
 		{
 			m_platform = platform;
 			break;
 		}
 	}
-	if (m_platform == 0)
+	if (m_platform == static_cast<Bundle::Platform>(0))
 		return false;
 
 	const auto numEntries = reader.Read<uint32_t>();
 
 	uint8_t blocks = 4;
-	if (m_platform == Bundle::Xbox360)
+	if (m_platform == Bundle::Platform::Xbox360)
 		blocks = 5;
-	else if (m_platform == Bundle::PS3)
+	else if (m_platform == Bundle::Platform::PS3)
 		blocks = 6;
 	std::array<uint32_t, 6> dataBlockSizes;
 	for (uint8_t i = 0; i < blocks; i++)
@@ -54,7 +54,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	reader.Skip<uint32_t>(); // start of data block
 
 	m_platform = reader.Read<Bundle::Platform>();
-	if (m_platform != Bundle::PC && m_platform != Bundle::Xbox360 && m_platform != Bundle::PS3)
+	if (m_platform != Bundle::Platform::PC && m_platform != Bundle::Platform::Xbox360 && m_platform != Bundle::Platform::PS3)
 		return false;
 
 	auto compressed = 0U;
@@ -243,7 +243,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	if (m_version <= 3 && (m_flags & Bundle::Compressed) != 0)
 		return false; // Invalid combination
 
-	writer.SetEndian(m_platform != Bundle::PC ? std::endian::big : std::endian::little);
+	writer.SetEndian(m_platform != Bundle::Platform::PC ? std::endian::big : std::endian::little);
 
 	writer.Write("bndl", 4);
 	writer.Write<uint32_t>(m_version);
@@ -256,9 +256,9 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	writer.Write<uint32_t>(entryCount);
 
 	uint8_t blocks = 4;
-	if (m_platform == Bundle::Xbox360)
+	if (m_platform == Bundle::Platform::Xbox360)
 		blocks = 5;
-	else if (m_platform == Bundle::PS3)
+	else if (m_platform == Bundle::Platform::PS3)
 		blocks = 6;
 
 	std::array<size_t, 3> dataBlockDescriptorsPos;
@@ -285,7 +285,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	auto dataBlockPointerPos = writer.GetOffset();
 	writer.Seek(4, std::ios::cur);
 
-	writer.Write<uint32_t>(m_platform);
+	writer.Write(m_platform);
 
 	size_t uncompInfoBlockPointerPos = 0;
 
@@ -484,17 +484,17 @@ int8_t BNDL::MapBNDLBlockToBND2(uint8_t block) const
 	auto mappedBlock = static_cast<int8_t>(block);
 	switch (m_platform)
 	{
-	case Bundle::PC:
+	case Bundle::Platform::PC:
 		if (block >= 3)
 			mappedBlock = -1;
 		break;
-	case Bundle::Xbox360:
+	case Bundle::Platform::Xbox360:
 		if (block == 1 || block >= 4)
 			mappedBlock = -1;
 		else if (block != 0)
 			mappedBlock = block - 1;
 		break;
-	case Bundle::PS3:
+	case Bundle::Platform::PS3:
 		if ((block >= 1 && block <= 3) || block >= 6)
 			mappedBlock = -1;
 		else if (block != 0)
