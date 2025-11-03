@@ -9,7 +9,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(cxxopts)
 
-target_link_libraries(bndl_util PRIVATE libbndl cxxopts::cxxopts)
+target_link_libraries(bndl_util PRIVATE libbndl cxxopts::cxxopts pugixml::pugixml)
+target_compile_definitions(bndl_util PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
 
 set_property(TARGET bndl_util PROPERTY CXX_STANDARD 20)
 
