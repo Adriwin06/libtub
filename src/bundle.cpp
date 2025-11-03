@@ -72,8 +72,10 @@ bool Bundle::Save(const std::string &name)
 	if (!m_impl->Save(writer))
 		return false;
 
+	const auto stream = writer.GetStream();
+
 	std::ofstream f(name, std::ios::out | std::ios::binary);
-	f << writer.GetStream().rdbuf();
+	f << stream.rdbuf();
 	f.close();
 
 	return true;

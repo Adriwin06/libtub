@@ -336,7 +336,8 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 		debugDataWriter.Write(static_cast<uint32_t>(outStr.size()));
 		debugDataWriter.Write(outStr);
 
-		const auto data = debugDataWriter.GetStream().view();
+		const auto stream = debugDataWriter.GetStream();
+		const auto data = stream.view();
 		const auto dataSize = data.size();
 
 		auto &e = m_entries[0xFFFFFFFF]; // HACK
