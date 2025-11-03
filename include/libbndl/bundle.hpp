@@ -40,8 +40,8 @@ namespace libbndl
 		enum Platform: uint32_t
 		{
 			PC = 1, // (or PS4/XB1)
-			Xbox360 = 2 << 24, // Big endian
-			PS3 = 3 << 24, // Big endian
+			Xbox360 = 2,
+			PS3 = 3
 		};
 
 		enum Flags: uint32_t

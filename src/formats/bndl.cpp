@@ -7,6 +7,16 @@ using namespace libbndl::Formats;
 
 bool BNDL::Load(binaryio::BinaryReader &reader)
 {
+	m_version = reader.Read<uint32_t>();
+	if ((m_version & 0xFFFF) == 0)
+	{
+		reader.SwapEndian();
+		reader.Seek(-4, std::ios::cur);
+		m_version = reader.Read<uint32_t>();
+	}
+	if (m_version < 3 || m_version > 5)
+		return false;
+
 	m_platform = static_cast<Bundle::Platform>(0);
 	auto platformReader = reader.Copy();
 	for (const auto offset : { 0x4C, 0x58, 0x64 })
@@ -16,15 +26,10 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 		if (platform == Bundle::PC || platform == Bundle::Xbox360 || platform == Bundle::PS3)
 		{
 			m_platform = platform;
-			reader.SetEndian(m_platform != Bundle::PC ? std::endian::big : std::endian::little);
 			break;
 		}
 	}
 	if (m_platform == 0)
-		return false;
-
-	m_version = reader.Read<uint32_t>();
-	if (m_version < 3 || m_version > 5)
 		return false;
 
 	const auto numEntries = reader.Read<uint32_t>();
@@ -34,7 +39,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 		blocks = 5;
 	else if (m_platform == Bundle::PS3)
 		blocks = 6;
-	uint32_t dataBlockSizes[6];
+	std::array<uint32_t, 6> dataBlockSizes;
 	for (uint8_t i = 0; i < blocks; i++)
 	{
 		dataBlockSizes[i] = reader.Read<uint32_t>();
@@ -48,9 +53,9 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	reader.Skip<uint32_t>(); // import block
 	reader.Skip<uint32_t>(); // start of data block
 
-	reader.SetEndian(std::endian::little);
-	reader.Verify<uint32_t>(m_platform);
-	reader.SetEndian(m_platform != Bundle::PC ? std::endian::big : std::endian::little);
+	m_platform = reader.Read<Bundle::Platform>();
+	if (m_platform != Bundle::PC && m_platform != Bundle::Xbox360 && m_platform != Bundle::PS3)
+		return false;
 
 	auto compressed = 0U;
 	auto uncompInfoOffset = 0U;
@@ -256,7 +261,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	else if (m_platform == Bundle::PS3)
 		blocks = 6;
 
-	size_t dataBlockDescriptorsPos[3];
+	std::array<size_t, 3> dataBlockDescriptorsPos;
 	for (uint8_t i = 0; i < blocks; i++)
 	{
 		auto mappedBlock = MapBNDLBlockToBND2(i);
@@ -280,9 +285,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	auto dataBlockPointerPos = writer.GetOffset();
 	writer.Seek(4, std::ios::cur);
 
-	writer.SetEndian(std::endian::little);
 	writer.Write<uint32_t>(m_platform);
-	writer.SetEndian(m_platform != Bundle::PC ? std::endian::big : std::endian::little);
 
 	size_t uncompInfoBlockPointerPos = 0;
 
@@ -356,7 +359,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	struct FilePointerPosHelper
 	{
 		size_t importPointerPos;
-		size_t dataBlockPointerPos[3];
+		std::array<size_t, 3> dataBlockPointerPos;
 	};
 	std::map<uint32_t, FilePointerPosHelper> filePointerPosMap;
 	for (const auto &entry : m_entries)

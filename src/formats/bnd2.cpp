@@ -28,14 +28,17 @@ static inline unsigned long BitScanReverse(unsigned long input)
 bool BND2::Load(binaryio::BinaryReader &reader)
 {
 	m_version = reader.Read<uint32_t>();
+	if ((m_version & 0xFFFF) == 0)
+	{
+		reader.SwapEndian();
+		reader.Seek(-4, std::ios::cur);
+		m_version = reader.Read<uint32_t>();
+	}
+	if (m_version != 2)
+		return false;
 
 	m_platform = reader.Read<Bundle::Platform>();
-	reader.SetEndian(m_platform != Bundle::PC ? std::endian::big : std::endian::little);
-
-	if (reader.GetEndian() != std::endian::native)
-		m_version = (m_version << 24) | (m_version << 8 & 0xff0000) | (m_version >> 8 & 0xff00) | (m_version >> 24);
-	// Little sanity check.
-	if (m_version != 2)
+	if (m_platform != Bundle::PC && m_platform != Bundle::Xbox360 && m_platform != Bundle::PS3)
 		return false;
 
 	const auto rstOffset = reader.Read<uint32_t>();
@@ -129,8 +132,10 @@ bool BND2::Load(binaryio::BinaryReader &reader)
 bool BND2::Save(binaryio::BinaryWriter &writer)
 {
 	writer.Write("bnd2", 4);
-	writer.Write<uint32_t>(2); // Bundle version
-	writer.Write(Bundle::PC); // Only PC writing supported for now.
+	writer.SetEndian(m_platform != Bundle::PC ? std::endian::big : std::endian::little);
+
+	writer.Write<uint32_t>(m_version);
+	writer.Write(m_platform);
 
 	auto rstPointerPos = writer.GetOffset();
 	writer.Seek(4, std::ios::cur); // write later
@@ -139,7 +144,7 @@ bool BND2::Save(binaryio::BinaryWriter &writer)
 
 	auto idBlockPointerPos = writer.GetOffset();
 	writer.Seek(4, std::ios::cur); // write later
-	size_t fileBlockPointerPos[3];
+	std::array<size_t, 3> fileBlockPointerPos;
 	for (auto &pointerPos : fileBlockPointerPos)
 	{
 		pointerPos = writer.GetOffset();
@@ -212,6 +217,9 @@ bool BND2::Save(binaryio::BinaryWriter &writer)
 	// DATA BLOCK
 	for (auto i = 0; i < 3; i++)
 	{
+		size_t alignment = (i == 0) ? 16 : 0x80;
+		writer.Align(alignment);
+
 		const auto blockStart = writer.GetOffset32();
 		writer.VisitAndWrite<uint32_t>(fileBlockPointerPos[i], blockStart);
 
@@ -225,16 +233,13 @@ bool BND2::Save(binaryio::BinaryWriter &writer)
 
 			if (readSize > 0)
 			{
+				writer.Align(alignment);
 				writer.VisitAndWrite<uint32_t>(entryDataPointerPos[j][i], writer.GetOffset32() - blockStart);
 				writer.Write(descriptor.data.get(), readSize);
-				writer.Align((i != 0 && j != m_entries.size() - 1) ? 0x80 : 16);
 			}
 
 			entryIter = std::next(entryIter);
 		}
-
-		if (i != 2)
-			writer.Align(0x80);
 	}
 
 	return true;
