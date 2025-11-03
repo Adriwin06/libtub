@@ -7,24 +7,6 @@
 using namespace libbndl;
 using namespace libbndl::Formats;
 
-#ifndef __has_builtin
-#	define __has_builtin(x) 0
-#endif
-static inline unsigned long BitScanReverse(unsigned long input)
-{
-	unsigned long result;
-
-#if defined(_MSC_VER)
-	_BitScanReverse(&result, input);
-#elif __has_builtin(__builtin_clzl) || defined(__GNUC__)
-	result = static_cast<unsigned long>(std::numeric_limits<unsigned long>::digits - 1 - __builtin_clzl(input));
-#else
-	result = std::bit_width(input | 1U) - 1;
-#endif
-
-	return result;
-}
-
 bool BND2::Load(binaryio::BinaryReader &reader)
 {
 	m_version = reader.Read<uint32_t>();
@@ -45,15 +27,13 @@ bool BND2::Load(binaryio::BinaryReader &reader)
 	const auto numEntries = reader.Read<uint32_t>();
 
 	const auto idBlockOffset = reader.Read<uint32_t>();
-	uint32_t fileBlockOffsets[3] = {
+	std::array<uint32_t, 3> fileBlockOffsets = {
 		reader.Read<uint32_t>(),
 		reader.Read<uint32_t>(),
 		reader.Read<uint32_t>()
 	};
 
-	m_flags = reader.Read<Bundle::Flags>();
-
-	// Last 8 bytes are padding.
+	m_flags = static_cast<Bundle::Flags>(reader.Read<uint32_t>());
 
 
 	m_entries.clear();
@@ -90,7 +70,7 @@ bool BND2::Load(binaryio::BinaryReader &reader)
 
 			auto &descriptor = e.descriptors[j];
 
-			const auto readSize = (m_flags & Bundle::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
+			const auto readSize = (m_flags & Bundle::Flags::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
 			if (readSize == 0)
 			{
 				descriptor.data = nullptr;
@@ -107,7 +87,7 @@ bool BND2::Load(binaryio::BinaryReader &reader)
 		reader.Seek(2, std::ios::cur); // Padding
 	}
 
-	if (m_flags & Bundle::HasResourceStringTable)
+	if (m_flags & Bundle::Flags::HasDebugData)
 	{
 		reader.Seek(rstOffset, std::ios::beg);
 
@@ -151,14 +131,14 @@ bool BND2::Save(binaryio::BinaryWriter &writer)
 		writer.Seek(4, std::ios::cur);
 	}
 
-	writer.Write(m_flags);
+	writer.Write<uint32_t>(m_flags);
 
 	writer.Align(16);
 
 
 	// RESOURCE STRING TABLE
 	writer.VisitAndWrite<uint32_t>(rstPointerPos, writer.GetOffset32());
-	if (m_flags & Bundle::HasResourceStringTable)
+	if (m_flags & Bundle::Flags::HasDebugData)
 	{
 		pugi::xml_document doc;
 		auto root = doc.append_child("ResourceStringTable");
@@ -229,7 +209,7 @@ bool BND2::Save(binaryio::BinaryWriter &writer)
 			const auto &e = entryIter->second;
 
 			const auto &descriptor = e.descriptors[i];
-			const auto readSize = (m_flags & Bundle::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
+			const auto readSize = (m_flags & Bundle::Flags::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
 
 			if (readSize > 0)
 			{

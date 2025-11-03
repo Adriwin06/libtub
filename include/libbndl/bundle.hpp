@@ -44,14 +44,6 @@ namespace libbndl
 			PS3 = 3
 		};
 
-		enum Flags: uint32_t
-		{
-			Compressed = 1,
-			MainMemOptimised = 2, // Always set.
-			GraphicsMemOptimised = 4, // Always set.
-			HasResourceStringTable = 8
-		};
-
 		enum ResourceType: uint32_t
 		{
 			Raster = 0x00,
@@ -197,6 +189,68 @@ namespace libbndl
 			GraphicsLocal = 2, // PS3
 		};
 
+
+		class Flags
+		{
+		public:
+			using UnderlyingType = uint32_t;
+
+		private:
+			enum class Values : UnderlyingType
+			{
+				Compressed = 1,
+				MainMemOptimised = 2, // Always set.
+				GraphicsMemOptimised = 4, // Always set.
+				HasDebugData = 8
+			};
+
+		public:
+			using enum Values;
+
+			constexpr Flags() noexcept : m_value(0) {}
+			constexpr Flags(Values flag) noexcept : m_value(LIBBNDL_TO_UNDERLYING(flag)) {}
+			constexpr Flags(const Flags &flags) noexcept = default;
+			constexpr explicit Flags(UnderlyingType flags) noexcept : m_value(flags) {}
+
+			constexpr bool operator==(const Flags &flags) const noexcept = default;
+			constexpr bool operator==(UnderlyingType flags) const noexcept { return m_value == flags; };
+
+			constexpr Flags operator&(const Flags &rhs) const noexcept { return Flags(m_value & rhs.m_value); }
+			friend constexpr Flags operator&(const Values &lhs, const Flags &rhs) noexcept { return rhs & lhs; }
+			friend constexpr Bundle::Flags operator&(Values lhs, Values rhs) noexcept { return Bundle::Flags(lhs) & rhs; }
+			constexpr Flags operator|(const Flags &rhs) const noexcept { return Flags(m_value | rhs.m_value); }
+			friend constexpr Flags operator|(const Values &lhs, const Flags &rhs) noexcept { return rhs | lhs; }
+			friend constexpr Bundle::Flags operator|(Values lhs, Values rhs) noexcept { return Bundle::Flags(lhs) | rhs; }
+			constexpr Flags operator^(const Flags &rhs) const noexcept { return Flags(m_value ^ rhs.m_value); }
+			friend constexpr Flags operator^(const Values &lhs, const Flags &rhs) noexcept { return rhs ^ lhs; }
+			friend constexpr Bundle::Flags operator^(Values lhs, Values rhs) noexcept { return Bundle::Flags(lhs) ^ rhs; }
+			constexpr Flags operator~() const noexcept { return Flags(~m_value); }
+			friend constexpr Bundle::Flags operator~(Values value) noexcept { return ~Bundle::Flags(value); }
+
+			constexpr Flags &operator|=(const Flags &rhs) noexcept
+			{
+				m_value |= rhs.m_value;
+				return *this;
+			}
+
+			constexpr Flags &operator&=(const Flags &rhs) noexcept
+			{
+				m_value &= rhs.m_value;
+				return *this;
+			}
+
+			constexpr Flags &operator^=(const Flags &rhs) noexcept
+			{
+				m_value ^= rhs.m_value;
+				return *this;
+			}
+
+			constexpr explicit operator bool() const noexcept { return !!m_value; }
+			constexpr explicit operator UnderlyingType() const noexcept { return m_value; }
+
+		private:
+			UnderlyingType m_value;
+		};
 
 		class ResourceDebugInfo
 		{

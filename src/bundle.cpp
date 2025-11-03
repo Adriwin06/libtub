@@ -4,8 +4,6 @@
 #include <binaryio/binaryreader.hpp>
 #include <binaryio/binarywriter.hpp>
 #include <algorithm>
-#include <cassert>
-#include <cstring>
 #include <fstream>
 #include <locale>
 #include <zlib.h>
@@ -24,6 +22,8 @@ Bundle::Bundle(MagicNumber magicNumber, uint32_t version, Platform platform, Fla
 	case MagicNumber::BND2:
 		m_impl = std::make_unique<Formats::BND2>(version, platform, flags);
 		break;
+	default:
+		throw new std::invalid_argument("Invalid magic number");
 	}
 }
 

@@ -64,7 +64,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	{
 		compressed = reader.Read<uint32_t>(); // flags but compression is the only valid one
 		if (compressed)
-			m_flags = Bundle::Compressed;
+			m_flags = Bundle::Flags::Compressed;
 		else
 			m_flags = static_cast<Bundle::Flags>(0);
 
@@ -207,7 +207,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	if (rstFile == nullptr)
 		return true;
 
-	m_flags = static_cast<Bundle::Flags>(m_flags | Bundle::HasResourceStringTable);
+	m_flags |= Bundle::Flags::HasDebugData;
 
 	auto rstReader = binaryio::BinaryReader(rstFile);
 
@@ -240,7 +240,11 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 
 bool BNDL::Save(binaryio::BinaryWriter &writer)
 {
-	if (m_version <= 3 && (m_flags & Bundle::Compressed) != 0)
+	// Only one flag is supported. Allow HasDebugData since we simulate it ourselves here.
+	if (BitScanReverse(static_cast<uint32_t>(m_flags & ~Bundle::Flags::HasDebugData)) >= 1)
+		return false;
+
+	if (m_version <= 3 && (m_flags & Bundle::Flags::Compressed))
 		return false; // Invalid combination
 
 	writer.SetEndian(m_platform != Bundle::Platform::PC ? std::endian::big : std::endian::little);
@@ -248,7 +252,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	writer.Write("bndl", 4);
 	writer.Write<uint32_t>(m_version);
 
-	const bool writeDebugData = !m_debugInfoEntries.empty() && (m_flags & Bundle::Compressed) == 0; // TODO: is the compressed check accurate?
+	const bool writeDebugData = !m_debugInfoEntries.empty() && !(m_flags & Bundle::Flags::Compressed); // TODO: is the compressed check accurate?
 	auto entryCount = static_cast<uint32_t>(m_entries.size());
 	if (writeDebugData)
 		entryCount++;
@@ -291,8 +295,8 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 
 	if (m_version >= 4)
 	{
-		writer.Write<uint32_t>(m_flags & Bundle::Compressed);
-		writer.Write<uint32_t>((m_flags & Bundle::Compressed) ? entryCount : 0);
+		writer.Write<uint32_t>(m_flags & ~Bundle::Flags::HasDebugData);
+		writer.Write<uint32_t>((m_flags & Bundle::Flags::Compressed) ? entryCount : 0);
 		uncompInfoBlockPointerPos = writer.GetOffset();
 		writer.Write<uint32_t>(0); // will write later, but only if needed
 	}
@@ -384,7 +388,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 			else
 			{
 				const auto &descriptor = entry.second.descriptors[mappedBlock];
-				const auto size = (m_flags & Bundle::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
+				const auto size = (m_flags & Bundle::Flags::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
 				writer.Write<uint32_t>(size);
 				writer.Write<uint32_t>((size == 0) ? 1 : descriptor.uncompressedAlignment);
 			}
@@ -406,7 +410,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	}
 
 	// UNCOMPRESSED SIZE INFO
-	if (m_flags & Bundle::Compressed)
+	if (m_flags & Bundle::Flags::Compressed)
 	{
 		writer.VisitAndWrite<uint32_t>(uncompInfoBlockPointerPos, writer.GetOffset32());
 		for (const auto &entry : m_entries)
@@ -459,7 +463,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 			const auto &e = entry.second;
 
 			const auto &descriptor = e.descriptors[i];
-			const auto readSize = (m_flags & Bundle::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
+			const auto readSize = (m_flags & Bundle::Flags::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
 
 			if (readSize > 0)
 			{

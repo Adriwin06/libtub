@@ -186,7 +186,7 @@ int main(int argc, char** argv)
 					configRoot.append_attribute("mainMemOptimised").set_value(!!(flags & Bundle::Flags::MainMemOptimised));
 					configRoot.append_attribute("graphicsMemOptimised").set_value(!!(flags & Bundle::Flags::GraphicsMemOptimised));
 				}
-				configRoot.append_attribute("debugData").set_value(!!(flags & Bundle::Flags::HasResourceStringTable));
+				configRoot.append_attribute("debugData").set_value(!!(flags & Bundle::Flags::HasDebugData));
 
 				std::ofstream manifest(archiveExtractDir / "_manifest.txt");
 				manifest << "# This is a mapping of IDs to file names for your information. This file is not used for bundle packing and does not need to exist." << std::endl;
@@ -340,8 +340,6 @@ int main(int argc, char** argv)
 		}
 
 		// TODO: check for overwrite?
-
-		std::vector<std::filesystem::path> resourceFilePaths;
 	}
 
 	return 0;

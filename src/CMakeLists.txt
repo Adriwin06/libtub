@@ -18,7 +18,7 @@ add_library(libbndl ${SRC_FILES} ${PUBLIC_HEADERS})
 FetchContent_Declare(
     binaryio
     GIT_REPOSITORY https://github.com/Bo98/libbinaryio
-    GIT_TAG        6e9dd3c55a4c0fe598ecdad6fea59f424eb89ec2
+    GIT_TAG        2a95966233e818cf5c0990d6bf338da4afc81c7e
     EXCLUDE_FROM_ALL
     FIND_PACKAGE_ARGS
 )

@@ -10,10 +10,29 @@
 #include <string>
 #include <vector>
 
+#ifndef __has_builtin
+#	define __has_builtin(x) 0
+#endif
+
 namespace libbndl
 {
 	namespace Formats
 	{
+		inline unsigned long BitScanReverse(unsigned long input)
+		{
+			unsigned long result;
+
+#if defined(_MSC_VER)
+			_BitScanReverse(&result, input);
+#elif __has_builtin(__builtin_clzl) || defined(__GNUC__)
+			result = static_cast<unsigned long>(std::numeric_limits<unsigned long>::digits - 1 - __builtin_clzl(input));
+#else
+			result = std::bit_width(input | 1U) - 1;
+#endif
+
+			return result;
+		}
+
 		struct ResourceData
 		{
 			uint32_t uncompressedSize;

@@ -50,7 +50,7 @@ Bundle::Buffer Base::GetBinary(uint32_t resourceID, Bundle::MemoryType memoryTyp
 
 	if (dataInfo.compressedSize > 0)
 	{
-		assert(m_flags & Bundle::Compressed);
+		assert(m_flags & Bundle::Flags::Compressed);
 
 		uLongf uncompressedSizeLong = uncompressedSize;
 		const auto ret = uncompress(uncompressedBuffer.get(), &uncompressedSizeLong, buffer.get(), static_cast<uLong>(dataInfo.compressedSize));
@@ -132,8 +132,8 @@ bool Base::ReplaceResource(uint32_t resourceID, const Bundle::Resource &resource
 			const auto depSize = writer.GetSize();
 			auto depStream = writer.GetStream();
 
-			const auto inDataInfoSize = inDataInfo.GetSize();
-			binaryio::Align(inDataInfoSize, 16);
+			auto inDataInfoSize = inDataInfo.GetSize();
+			inDataInfoSize = binaryio::Align(inDataInfoSize, 16);
 
 			inSize = inDataInfoSize + depSize;
 			inBuffer = std::make_unique_for_overwrite<uint8_t[]>(inSize);
@@ -152,7 +152,7 @@ bool Base::ReplaceResource(uint32_t resourceID, const Bundle::Resource &resource
 
 		const auto uncompressedSize = static_cast<uint32_t>(inSize);
 
-		if (m_flags & Bundle::Compressed)
+		if (m_flags & Bundle::Flags::Compressed)
 		{
 			const auto compBufferSize = compressBound(static_cast<uLong>(inSize));
 			std::vector<uint8_t> compBuffer(compBufferSize);
