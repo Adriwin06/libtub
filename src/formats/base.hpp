@@ -37,22 +37,25 @@ namespace libbndl
 		{
 			uint32_t uncompressedSize;
 			uint32_t uncompressedAlignment; // default depending on file type
-			uint32_t compressedSize;
+			uint32_t onDiskSize;
+			uint32_t onDiskAlignment;
 			std::unique_ptr<uint8_t[]> data;
 		};
 
 		struct ResourceEntry
 		{
-			std::array<ResourceData, 3> descriptors;
+			std::array<ResourceData, 4> descriptors;
 
-			uint32_t importHash; // Stored in bundle as 64-bit (8-byte)
+			uint64_t importHash;
 
 			uint32_t importOffset;
-			Bundle::ResourceType resourceType;
+			uint32_t resourceType;
 			uint16_t importCount;
+
+			uint8_t streamIndex;
 		};
 
-		struct ResourceDebugInfo
+		struct ResourceDebugInfoEntry
 		{
 			std::string name;
 			std::string typeName;
@@ -60,7 +63,7 @@ namespace libbndl
 
 		struct ImportEntry
 		{
-			uint32_t resourceID;
+			ResourceID resourceID;
 			uint32_t offset;
 		};
 
@@ -68,44 +71,47 @@ namespace libbndl
 		{
 		public:
 			Base() = default;
-			Base(uint32_t version, Bundle::Platform platform, Bundle::Flags flags);
+			Base(uint32_t version, Platform platform, Flags flags);
 			virtual ~Base() = default;
 
 			virtual bool Load(binaryio::BinaryReader &reader) = 0;
 			virtual bool Save(binaryio::BinaryWriter &reader) = 0;
 
-			[[nodiscard]] virtual constexpr Bundle::MagicNumber GetMagicNumber() const = 0;
+			[[nodiscard]] virtual constexpr MagicNumber GetMagicNumber() const = 0;
 			[[nodiscard]] constexpr uint32_t GetVersion() const { return m_version; }
-			[[nodiscard]] constexpr Bundle::Platform GetPlatform() const { return m_platform; }
-			[[nodiscard]] constexpr Bundle::Flags GetFlags() const { return m_flags; }
+			[[nodiscard]] constexpr Platform GetPlatform() const { return m_platform; }
+			[[nodiscard]] constexpr Flags GetFlags() const { return m_flags; }
 
-			[[nodiscard]] std::optional<ResourceDebugInfo> GetResourceDebugInfo(uint32_t resourceID) const;
-			[[nodiscard]] std::optional<Bundle::ResourceType> GetResourceType(uint32_t resourceID) const;
-			[[nodiscard]] virtual std::optional<Bundle::Resource> GetResource(uint32_t resourceID) const = 0;
-			[[nodiscard]] Bundle::Buffer GetBinary(uint32_t resourceID, Bundle::MemoryType memoryType) const;
+			[[nodiscard]] std::optional<ResourceDebugInfoEntry> GetResourceDebugInfo(ResourceID resourceID) const;
+			[[nodiscard]] std::optional<uint32_t> GetResourceType(ResourceID resourceID) const;
+			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceID resourceID) const = 0;
+			[[nodiscard]] Buffer GetBinary(ResourceID resourceID, MemoryType memoryType) const;
 
-			bool AddResource(uint32_t resourceID, const Bundle::Resource &data, Bundle::ResourceType resourceType);
-			bool AddResourceDebugInfo(uint32_t resourceID, const std::string &name, const std::string &type);
+			bool AddResource(ResourceID resourceID, const Resource &data, uint32_t resourceType);
+			bool AddResourceDebugInfo(ResourceID resourceID, const std::string &name, const std::string &type);
 
-			bool ReplaceResource(uint32_t resourceID, const Bundle::Resource &data);
+			bool ReplaceResource(ResourceID resourceID, const Resource &data);
 
-			[[nodiscard]] std::vector<uint32_t> GetResourceIDs() const;
-			[[nodiscard]] std::map<Bundle::ResourceType, std::vector<uint32_t>> GetResourceIDsByType() const;
+			[[nodiscard]] std::vector<ResourceID> GetResourceIDs() const;
+			[[nodiscard]] std::map<uint32_t, std::vector<ResourceID>> GetResourceIDsByType() const;
 
-			[[nodiscard]] std::vector<Bundle::MemoryType> GetMemoryTypes() const;
+			[[nodiscard]] virtual std::vector<MemoryType> GetMemoryTypes() const;
 
 		protected:
-			std::map<uint32_t, ResourceEntry> m_entries;
-			std::map<uint32_t, ResourceDebugInfo> m_debugInfoEntries;
+			std::map<ResourceID, ResourceEntry> m_entries;
+			std::map<ResourceID, ResourceDebugInfoEntry> m_debugInfoEntries;
 
 			uint32_t m_version;
-			Bundle::Platform m_platform;
-			Bundle::Flags m_flags;
+			Platform m_platform;
+			Flags m_flags;
 
 			virtual constexpr bool AppendsImportsToResource() const = 0;
 
+			void ParseDebugData(const std::string &rstXML);
+			[[nodiscard]] std::string GenerateDebugData() const;
+
 			static [[nodiscard]] ImportEntry ReadImport(binaryio::BinaryReader &reader);
-			static void WriteImport(binaryio::BinaryWriter &writer, const Bundle::Import &import);
+			static void WriteImport(binaryio::BinaryWriter &writer, const Import &import);
 		};
 	}
 }

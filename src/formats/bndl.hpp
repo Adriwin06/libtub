@@ -13,16 +13,16 @@ namespace libbndl
 			virtual bool Load(binaryio::BinaryReader &reader) override;
 			virtual bool Save(binaryio::BinaryWriter &reader) override;
 
-			[[nodiscard]] virtual constexpr Bundle::MagicNumber GetMagicNumber() const override { return Bundle::MagicNumber::BNDL; }
+			[[nodiscard]] virtual constexpr MagicNumber GetMagicNumber() const override { return MagicNumber::BNDL; }
 
-			[[nodiscard]] virtual std::optional<Bundle::Resource> GetResource(uint32_t resourceID) const override;
+			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceID resourceID) const override;
 
 		private:
-			std::map<uint32_t, std::vector<ImportEntry>> m_imports;
+			std::map<ResourceID, std::vector<ImportEntry>> m_imports;
 
 			virtual constexpr bool AppendsImportsToResource() const override { return false; }
 
-			[[nodiscard]] int8_t MapBNDLBlockToBND2(uint8_t block) const;
+			[[nodiscard]] std::optional<uint8_t> MapFileBlockToLibBlock(uint8_t block) const;
 		};
 	}
 }

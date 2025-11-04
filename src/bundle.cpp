@@ -81,7 +81,7 @@ bool Bundle::Save(const std::string &name)
 	return true;
 }
 
-Bundle::MagicNumber Bundle::GetMagicNumber() const
+MagicNumber Bundle::GetMagicNumber() const
 {
 	return m_impl->GetMagicNumber();
 }
@@ -91,72 +91,82 @@ uint32_t Bundle::GetVersion() const
 	return m_impl->GetVersion();
 }
 
-Bundle::Platform Bundle::GetPlatform() const
+Platform Bundle::GetPlatform() const
 {
 	return m_impl->GetPlatform();
 }
 
-Bundle::Flags Bundle::GetFlags() const
+Flags Bundle::GetFlags() const
 {
 	return m_impl->GetFlags();
 }
 
-uint32_t Bundle::HashResourceName(std::string resourceName) const
+bool Bundle::IsBurnoutEra() const
 {
-	std::transform(resourceName.begin(), resourceName.end(), resourceName.begin(), [](auto c) { return std::tolower(c, std::locale::classic()); });
-	return crc32_z(0, reinterpret_cast<const Bytef *>(resourceName.c_str()), resourceName.length());
+	return GetMagicNumber() == MagicNumber::BNDL || GetVersion() <= 2;
 }
 
-std::optional<Bundle::Resource> Bundle::GetResource(const std::string &resourceName) const
+bool Bundle::IsNeedForSpeedEra() const
+{
+	return GetMagicNumber() == MagicNumber::BND2 && GetVersion() >= 3;
+}
+
+ResourceID Bundle::HashResourceName(std::string resourceName) const
+{
+	std::transform(resourceName.begin(), resourceName.end(), resourceName.begin(), [](auto c) { return std::tolower(c, std::locale::classic()); });
+	return ResourceID(crc32_z(0, reinterpret_cast<const Bytef *>(resourceName.c_str()), resourceName.length()));
+}
+
+std::optional<Resource> Bundle::GetResource(const std::string &resourceName) const
 {
 	return GetResource(HashResourceName(resourceName));
 }
 
-std::optional<Bundle::Resource> Bundle::GetResource(uint32_t resourceID) const
+std::optional<Resource> Bundle::GetResource(ResourceID resourceID) const
 {
 	return m_impl->GetResource(resourceID);
 }
 
-Bundle::Buffer Bundle::GetBinary(const std::string &resourceName, MemoryType memoryType) const
+Buffer Bundle::GetBinary(const std::string &resourceName, MemoryType memoryType) const
 {
 	return GetBinary(HashResourceName(resourceName), memoryType);
 }
 
-Bundle::Buffer Bundle::GetBinary(uint32_t resourceID, MemoryType memoryType) const
+Buffer Bundle::GetBinary(ResourceID resourceID, MemoryType memoryType) const
 {
 	return m_impl->GetBinary(resourceID, memoryType);
 }
 
-std::optional<Bundle::ResourceDebugInfo> Bundle::GetResourceDebugInfo(const std::string &resourceName) const
+std::optional<ResourceDebugInfo> Bundle::GetResourceDebugInfo(const std::string &resourceName) const
 {
 	return GetResourceDebugInfo(HashResourceName(resourceName));
 }
 
-std::optional<Bundle::ResourceDebugInfo> Bundle::GetResourceDebugInfo(uint32_t resourceID) const
+std::optional<ResourceDebugInfo> Bundle::GetResourceDebugInfo(ResourceID resourceID) const
 {
 	const auto &internalDebugInfo = m_impl->GetResourceDebugInfo(resourceID);
 	if (!internalDebugInfo.has_value())
 		return {};
 
-	return Bundle::ResourceDebugInfo{ internalDebugInfo->name, internalDebugInfo->typeName };
+	return ResourceDebugInfo{ internalDebugInfo->name, internalDebugInfo->typeName };
 }
 
-std::optional<Bundle::ResourceType> Bundle::GetResourceType(const std::string &resourceName) const
+std::optional<uint32_t> Bundle::GetResourceType(const std::string &resourceName) const
 {
 	return GetResourceType(HashResourceName(resourceName));
 }
 
-std::optional<Bundle::ResourceType> Bundle::GetResourceType(uint32_t resourceID) const
+std::optional<uint32_t> Bundle::GetResourceType(ResourceID resourceID) const
 {
 	return m_impl->GetResourceType(resourceID);
 }
 
-bool Bundle::AddResource(const std::string &resourceName, const Resource &resource, Bundle::ResourceType resourceType)
+bool Bundle::AddResource(const std::string &resourceName, const Resource &resource, uint32_t resourceType)
 {
 	return AddResource(HashResourceName(resourceName), resource, resourceType);
 }
 
-bool Bundle::AddResource(uint32_t resourceID, const Resource &resource, Bundle::ResourceType resourceType)
+bool Bundle::AddResource(ResourceID resourceID, const Resource &resource, uint32_t resourceType)
 {
 	return m_impl->AddResource(resourceID, resource, resourceType);
 }
@@ -166,7 +176,7 @@ bool Bundle::AddResourceDebugInfo(const std::string &resourceName, const std::st
 	return AddResourceDebugInfo(HashResourceName(resourceName), name, type);
 }
 
-bool Bundle::AddResourceDebugInfo(uint32_t resourceID, const std::string &name, const std::string &type)
+bool Bundle::AddResourceDebugInfo(ResourceID resourceID, const std::string &name, const std::string &type)
 {
 	return m_impl->AddResourceDebugInfo(resourceID, name, type);
 }
@@ -176,22 +186,22 @@ bool Bundle::ReplaceResource(const std::string &resourceName, const Resource &re
 	return ReplaceResource(HashResourceName(resourceName), resource);
 }
 
-bool Bundle::ReplaceResource(uint32_t resourceID, const Resource &resource)
+bool Bundle::ReplaceResource(ResourceID resourceID, const Resource &resource)
 {
 	return m_impl->ReplaceResource(resourceID, resource);
 }
 
-std::vector<uint32_t> Bundle::GetResourceIDs() const
+std::vector<ResourceID> Bundle::GetResourceIDs() const
 {
 	return m_impl->GetResourceIDs();
 }
 
-std::map<Bundle::ResourceType, std::vector<uint32_t>> Bundle::GetResourceIDsByType() const
+std::map<uint32_t, std::vector<ResourceID>> Bundle::GetResourceIDsByType() const
 {
 	return m_impl->GetResourceIDsByType();
 }
 
-std::vector<Bundle::MemoryType> Bundle::GetMemoryTypes() const
+std::vector<MemoryType> Bundle::GetMemoryTypes() const
 {
 	return m_impl->GetMemoryTypes();
 }

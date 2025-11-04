@@ -109,7 +109,7 @@ int main(int argc, char** argv)
 				if (debugInfo)
 					name << debugInfo->GetName();
 				else
-					name << std::hex << resourceID;
+					name << std::hex << static_cast<uint64_t>(resourceID);
 				std::ostringstream typeName;
 				if (debugInfo)
 					typeName << debugInfo->GetTypeName();
@@ -167,26 +167,32 @@ int main(int argc, char** argv)
 				std::string platformName;
 				switch (platform)
 				{
-				case Bundle::Platform::PC:
+				case Platform::PC:
 					platformName = "PC";
 					break;
-				case Bundle::Platform::Xbox360:
+				case Platform::Xbox360:
 					platformName = "Xbox 360";
 					break;
-				case Bundle::Platform::PS3:
+				case Platform::PS3:
 					platformName = "PS3";
 					break;
 				}
 				configRoot.append_attribute("platform").set_value(platformName.c_str());
 
 				const auto flags = arch.GetFlags();
-				configRoot.append_attribute("compressed").set_value(!!(flags & Bundle::Flags::Compressed));
-				if (arch.GetMagicNumber() == Bundle::MagicNumber::BND2)
+				configRoot.append_attribute("compressed").set_value(!!(flags & Flags::Compressed));
+				if (arch.GetMagicNumber() == MagicNumber::BND2)
 				{
-					configRoot.append_attribute("mainMemOptimised").set_value(!!(flags & Bundle::Flags::MainMemOptimised));
-					configRoot.append_attribute("graphicsMemOptimised").set_value(!!(flags & Bundle::Flags::GraphicsMemOptimised));
+					configRoot.append_attribute("mainMemOptimised").set_value(!!(flags & Flags::MainMemOptimised));
+					configRoot.append_attribute("graphicsMemOptimised").set_value(!!(flags & Flags::GraphicsMemOptimised));
 				}
-				configRoot.append_attribute("debugData").set_value(!!(flags & Bundle::Flags::HasDebugData));
+				configRoot.append_attribute("debugData").set_value(!!(flags & Flags::HasDebugData));
+				if (arch.IsNeedForSpeedEra())
+				{
+					configRoot.append_attribute("nonAsynchFixupRequired").set_value(!!(flags & Flags::NonAsynchFixupRequired));
+					configRoot.append_attribute("multistreamBundle").set_value(!!(flags &Flags::MultistreamBundle));
+					configRoot.append_attribute("deltaBundle").set_value(!!(flags &Flags::DeltaBundle));
+				}
 
 				std::ofstream manifest(archiveExtractDir / "_manifest.txt");
 				manifest << "# This is a mapping of IDs to file names for your information. This file is not used for bundle packing and does not need to exist." << std::endl;
@@ -198,7 +204,8 @@ int main(int argc, char** argv)
 					const auto data = *arch.GetResource(resourceID);
 
 					std::ostringstream idStrStream;
-					idStrStream << "0x" << std::hex << std::setw(8) << std::setfill('0') << std::uppercase << resourceID;
+					idStrStream << "0x" << std::hex << std::setw((resourceID.GetIDType() != ResourceID::EIDType::Normal) ? 16 : 8)
+						<< std::setfill('0') << std::uppercase << static_cast<uint64_t>(resourceID);
 
 					std::ostringstream name;
 					if (debugInfo)
@@ -215,9 +222,10 @@ int main(int argc, char** argv)
 						name << idStrStream.str();
 					}
 
-					const auto it = g_fileTypeNames.find(resourceType);
+					const auto &fileTypeNames = (arch.IsNeedForSpeedEra() ? g_nfsFileTypeNames : g_burnoutFileTypeNames);
+					const auto it = fileTypeNames.find(resourceType);
 					std::ostringstream pathTypeNameStream;
-					if (it == g_fileTypeNames.end())
+					if (it == fileTypeNames.end())
 						pathTypeNameStream << "Type " << std::hex << std::setw(2) << std::setfill('0') << std::uppercase << resourceType;
 					else
 						pathTypeNameStream << it->second;
@@ -242,22 +250,25 @@ int main(int argc, char** argv)
 						std::string typeExt;
 						switch (memoryType)
 						{
-						case Bundle::MemoryType::MainMemory:
+						case MemoryType::MainMemory:
 							typeExt = ".mainmem";
 							break;
-						case Bundle::MemoryType::GraphicsSystem:
-							if (platform == Bundle::Platform::PS3)
+						case MemoryType::GraphicsSystem:
+							if (platform == Platform::PS3)
 								typeExt = ".gfxsysmem";
-							else if (platform == Bundle::Platform::Xbox360)
+							else if (platform == Platform::Xbox360)
 								typeExt = ".physical";
 							else
-								typeExt = ".disposable";
+								typeExt = ".dummy";
 							break;
-						case Bundle::MemoryType::GraphicsLocal:
-							if (platform == Bundle::Platform::PS3)
+						case MemoryType::GraphicsLocal:
+							if (platform == Platform::PS3)
 								typeExt = ".gfxlocalmem";
 							else
 								typeExt = ".dummy";
+							break;
+						case MemoryType::Disposable:
+							typeExt = ".disposable";
 							break;
 						}
 
@@ -290,13 +301,17 @@ int main(int argc, char** argv)
 							else
 							{
 								std::ostringstream depIdStrStream;
-								depIdStrStream << "0x" << std::hex << std::setw(8) << std::setfill('0') << std::uppercase << import.GetResourceID();
+								depIdStrStream << "0x" << std::hex << std::setw((import.GetResourceID().GetIDType() != ResourceID::EIDType::Normal) ? 16 : 8)
+									<< std::setfill('0') << std::uppercase << static_cast<uint64_t>(import.GetResourceID());
 								entryChild.append_attribute("id").set_value(depIdStrStream.str().c_str());
 							}
 
 							std::ostringstream offsetStrStream;
 							offsetStrStream << "0x" << std::hex << std::setw(8) << std::setfill('0') << std::uppercase << import.GetOffset();
 							entryChild.append_attribute("offset").set_value(offsetStrStream.str().c_str());
+
+							if (arch.IsNeedForSpeedEra())
+								entryChild.append_attribute("resourceHandle").set_value(import.GetImportType() == Import::ImportType::ResourceHandle);
 						}
 
 						std::ofstream outfile(fileExtractDir / (name.str() + ".imports.xml"));
@@ -312,6 +327,8 @@ int main(int argc, char** argv)
 						entryChild.append_attribute("typeDebugName").set_value(pathTypeNameStream.str().c_str());
 					else
 						entryChild.append_attribute("typeDebugName").set_value(debugInfo->GetTypeName().c_str());
+					if (arch.IsNeedForSpeedEra() && (flags & Flags::MultistreamBundle))
+						entryChild.append_attribute("streamIndex").set_value(data.GetStreamIndex());
 
 					auto debugName = std::string();
 					if (debugInfo && !debugInfo->GetName().empty())

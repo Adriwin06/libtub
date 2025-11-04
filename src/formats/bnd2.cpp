@@ -1,8 +1,7 @@
 #include "bnd2.hpp"
-#include <iomanip>
+#include <algorithm>
 #include <limits>
-#include <regex>
-#include <pugixml.hpp>
+#include <ranges>
 
 using namespace libbndl;
 using namespace libbndl::Formats;
@@ -16,24 +15,26 @@ bool BND2::Load(binaryio::BinaryReader &reader)
 		reader.Seek(-4, std::ios::cur);
 		m_version = reader.Read<uint32_t>();
 	}
-	if (m_version != 2)
+	if (m_version != 2 && m_version != 3)
 		return false;
 
-	m_platform = reader.Read<Bundle::Platform>();
-	if (m_platform != Bundle::Platform::PC && m_platform != Bundle::Platform::Xbox360 && m_platform != Bundle::Platform::PS3)
+	m_platform = reader.Read<Platform>();
+	if (m_platform != Platform::PC && m_platform != Platform::Xbox360 && m_platform != Platform::PS3)
 		return false;
 
 	const auto rstOffset = reader.Read<uint32_t>();
 	const auto numEntries = reader.Read<uint32_t>();
 
 	const auto idBlockOffset = reader.Read<uint32_t>();
-	std::array<uint32_t, 3> fileBlockOffsets = {
+	const auto blocks = (m_version >= 3) ? 4 : 3;
+	std::array<uint32_t, 4> fileBlockOffsets = {
 		reader.Read<uint32_t>(),
 		reader.Read<uint32_t>(),
-		reader.Read<uint32_t>()
+		reader.Read<uint32_t>(),
+		(blocks == 4) ? reader.Read<uint32_t>() : 0,
 	};
 
-	m_flags = static_cast<Bundle::Flags>(reader.Read<uint32_t>());
+	m_flags = Flags(reader.Read<uint32_t>());
 
 
 	m_entries.clear();
@@ -42,68 +43,56 @@ bool BND2::Load(binaryio::BinaryReader &reader)
 	reader.Seek(idBlockOffset);
 	for (auto i = 0U; i < numEntries; i++)
 	{
-		// These are stored in bundle as 64-bit (8-byte), but are really 32-bit.
-		auto resourceID = static_cast<uint32_t>(reader.Read<uint64_t>());
+		auto resourceID = ResourceID(reader.Read<uint64_t>());
 		assert(resourceID != 0);
+
 		auto &e = m_entries[resourceID];
-		e.importHash = static_cast<uint32_t>(reader.Read<uint64_t>());
+		e.importHash = reader.Read<uint64_t>();
 
-		// The uncompressed sizes have a high nibble that varies depending on the resource type.
-		const auto uncompSize0 = reader.Read<uint32_t>();
-		e.descriptors[0].uncompressedSize = uncompSize0 & ~(0xFU << 28);
-		e.descriptors[0].uncompressedAlignment = 1 << (uncompSize0 >> 28);
-		const auto uncompSize1 = reader.Read<uint32_t>();
-		e.descriptors[1].uncompressedSize = uncompSize1 & ~(0xFU << 28);
-		e.descriptors[1].uncompressedAlignment = 1 << (uncompSize1 >> 28);
-		const auto uncompSize2 = reader.Read<uint32_t>();
-		e.descriptors[2].uncompressedSize = uncompSize2 & ~(0xFU << 28);
-		e.descriptors[2].uncompressedAlignment = 1 << (uncompSize2 >> 28);
+		for (auto j = 0; j < blocks; j++)
+		{
+			const auto uncompSize = reader.Read<uint32_t>();
+			e.descriptors[j].uncompressedSize = uncompSize & ~(0xFU << 28);
+			e.descriptors[j].uncompressedAlignment = 1 << (uncompSize >> 28);
+		}
 
-		e.descriptors[0].compressedSize = reader.Read<uint32_t>();
-		e.descriptors[1].compressedSize = reader.Read<uint32_t>();
-		e.descriptors[2].compressedSize = reader.Read<uint32_t>();
+		for (auto j = 0; j < blocks; j++)
+		{
+			const auto onDiskSize = reader.Read<uint32_t>();
+			e.descriptors[j].onDiskSize = onDiskSize & ~(0xFU << 28);
+			e.descriptors[j].onDiskAlignment = 1 << (onDiskSize >> 28);
+		}
 
 		auto dataReader = reader.Copy();
-		for (auto j = 0; j < 3; j++)
+		for (auto j = 0; j < blocks; j++)
 		{
 			dataReader.Seek(fileBlockOffsets[j] + reader.Read<uint32_t>()); // Read offset
 
 			auto &descriptor = e.descriptors[j];
 
-			const auto readSize = (m_flags & Bundle::Flags::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
-			if (readSize == 0)
+			if (descriptor.onDiskSize == 0)
 			{
 				descriptor.data = nullptr;
 				continue;
 			}
 
-			descriptor.data = std::unique_ptr<uint8_t[]>(dataReader.Read<uint8_t *>(readSize));
+			descriptor.data = std::unique_ptr<uint8_t[]>(dataReader.Read<uint8_t *>(descriptor.onDiskSize));
 		}
 
 		e.importOffset = reader.Read<uint32_t>();
-		e.resourceType = reader.Read<Bundle::ResourceType>();
+		e.resourceType = reader.Read<uint32_t>();
 		e.importCount = reader.Read<uint16_t>();
 
-		reader.Seek(2, std::ios::cur); // Padding
+		reader.Verify<uint8_t>(0); // flags
+		e.streamIndex = reader.Read<uint8_t>();
+
+		reader.Align(8);
 	}
 
-	if (m_flags & Bundle::Flags::HasDebugData)
+	if (m_flags & Flags::HasDebugData)
 	{
 		reader.Seek(rstOffset, std::ios::beg);
-
-		const auto rstXML = reader.ReadString();
-
-		pugi::xml_document doc;
-		if (doc.load_string(rstXML.c_str(), pugi::parse_minimal))
-		{
-			for (const auto &resource : doc.child("ResourceStringTable").children("Resource"))
-			{
-				const auto resourceID = std::stoul(resource.attribute("id").value(), nullptr, 16);
-				auto &debugInfo = m_debugInfoEntries[resourceID];
-				debugInfo.name = resource.attribute("name").value();
-				debugInfo.typeName = resource.attribute("type").value();
-			}
-		}
+		ParseDebugData(reader.ReadString());
 	}
 
 	return true;
@@ -111,8 +100,15 @@ bool BND2::Load(binaryio::BinaryReader &reader)
 
 bool BND2::Save(binaryio::BinaryWriter &writer)
 {
+	if (m_version != 2 && m_version != 3)
+		return false;
+
+	// For version 2, only the first 4 flags are supported
+	if (m_version == 2 && BitScanReverse(static_cast<uint32_t>(m_flags)) >= 4)
+		return false;
+
 	writer.Write("bnd2", 4);
-	writer.SetEndian(m_platform != Bundle::Platform::PC ? std::endian::big : std::endian::little);
+	writer.SetEndian(m_platform != Platform::PC ? std::endian::big : std::endian::little);
 
 	writer.Write<uint32_t>(m_version);
 	writer.Write(m_platform);
@@ -122,12 +118,14 @@ bool BND2::Save(binaryio::BinaryWriter &writer)
 
 	writer.Write(static_cast<uint32_t>(m_entries.size()));
 
+	const uint8_t blocks = (m_version >= 3) ? 4 : 3;
+
 	auto idBlockPointerPos = writer.GetOffset();
 	writer.Seek(4, std::ios::cur); // write later
-	std::array<size_t, 3> fileBlockPointerPos;
-	for (auto &pointerPos : fileBlockPointerPos)
+	std::array<size_t, 4> fileBlockPointerPos;
+	for (auto i = 0; i < blocks; i++)
 	{
-		pointerPos = writer.GetOffset();
+		fileBlockPointerPos[i] = writer.GetOffset();
 		writer.Seek(4, std::ios::cur);
 	}
 
@@ -136,66 +134,91 @@ bool BND2::Save(binaryio::BinaryWriter &writer)
 	writer.Align(16);
 
 
-	// RESOURCE STRING TABLE
-	writer.VisitAndWrite<uint32_t>(rstPointerPos, writer.GetOffset32());
-	if (m_flags & Bundle::Flags::HasDebugData)
+	// RESOURCE STRING TABLE (version == 2)
+	if (m_version == 2)
 	{
-		pugi::xml_document doc;
-		auto root = doc.append_child("ResourceStringTable");
-		for (const auto &entry : m_debugInfoEntries)
+		writer.VisitAndWrite<uint32_t>(rstPointerPos, writer.GetOffset32());
+		if (m_flags & Flags::HasDebugData)
 		{
-			auto entryChild = root.append_child("Resource");
-
-			std::stringstream idStream;
-			idStream << std::hex << std::setw(8) << std::setfill('0') << entry.first;
-
-			entryChild.append_attribute("id").set_value(idStream.str().c_str());
-			entryChild.append_attribute("type").set_value(entry.second.typeName.c_str());
-			entryChild.append_attribute("name").set_value(entry.second.name.c_str());
+			writer.Write(GenerateDebugData());
+			writer.Align(16);
 		}
-
-		std::stringstream out;
-		doc.save(out, "\t", pugi::format_indent | pugi::format_no_declaration, pugi::encoding_utf8);
-		const auto outStr = std::regex_replace(out.str(), std::regex(" />\n"), "/>\n");
-		writer.Write(outStr);
-
-		writer.Align(16);
 	}
 
-
 	// ID BLOCK
+	const auto keys = std::views::keys(m_entries);
+	std::vector<ResourceID> sortedKeys{ keys.begin(), keys.end() };
+	if (m_version >= 3)
+	{
+		std::sort(sortedKeys.begin(), sortedKeys.end(), [this](const auto &a, const auto &b) {
+			const auto &entryA = m_entries.at(a);
+			const auto &entryB = m_entries.at(b);
+
+			const auto idTypeA = a.GetIDType();
+			const auto idTypeB = b.GetIDType();
+			const auto indexA = (idTypeA == ResourceID::EIDType::GameChanger) ? a.GetIndex() : 0;
+			const auto indexB = (idTypeB == ResourceID::EIDType::GameChanger) ? b.GetIndex() : 0;
+			const auto typeIDA = (idTypeA == ResourceID::EIDType::GameChanger) ? a.GetTypeID() : 0;
+			const auto typeIDB = (idTypeB == ResourceID::EIDType::GameChanger) ? b.GetTypeID() : 0;
+			const auto idA = a.GetGameChangerID();
+			const auto idB = b.GetGameChangerID();
+
+			return std::tie(entryA.streamIndex, indexA, typeIDA, idTypeA, idA) < std::tie(entryB.streamIndex, indexB, typeIDB, idTypeB, idB);
+		});
+	}
+
 	writer.VisitAndWrite<uint32_t>(idBlockPointerPos, writer.GetOffset32());
-	auto entryDataPointerPos = std::vector<std::array<size_t, 3>>(m_entries.size());
-	auto entryIter = m_entries.begin();
+	auto entryDataPointerPos = std::vector<std::array<size_t, 4>>(m_entries.size());
+	auto entryIter = sortedKeys.begin();
 	for (auto i = 0U; i < m_entries.size(); i++)
 	{
-		writer.Write<uint64_t>(entryIter->first);
+		writer.Write<uint64_t>(*entryIter);
 
-		const auto &e = entryIter->second;
+		const auto &e = m_entries.at(*entryIter);
 
-		writer.Write<uint64_t>(e.importHash);
+		writer.Write(e.importHash);
 
-		for (auto &descriptor : e.descriptors)
-			writer.Write(descriptor.uncompressedSize | (BitScanReverse(descriptor.uncompressedAlignment) << 28));
-		for (auto &descriptor : e.descriptors)
-			writer.Write(descriptor.compressedSize);
-		for (auto j = 0; j < 3; j++)
+		for (uint8_t j = 0; j < blocks; j++)
 		{
-			entryDataPointerPos[i][j] = writer.GetOffset();
-			writer.Seek(4, std::ios::cur);
+			const auto mappedBlock = MapFileBlockToLibBlock(j);
+			if (mappedBlock.has_value())
+				writer.Write(e.descriptors[*mappedBlock].uncompressedSize | (BitScanReverse(e.descriptors[*mappedBlock].uncompressedAlignment) << 28));
+			else
+				writer.Write<uint32_t>(0);
+		}
+
+		for (uint8_t j = 0; j < blocks; j++)
+		{
+			const auto mappedBlock = MapFileBlockToLibBlock(j);
+			if (mappedBlock.has_value())
+				writer.Write(e.descriptors[*mappedBlock].onDiskSize | (BitScanReverse(e.descriptors[*mappedBlock].onDiskAlignment) << 28));
+			else
+				writer.Write<uint32_t>(0);
+		}
+
+		for (uint8_t j = 0; j < blocks; j++)
+		{
+			const auto mappedBlock = MapFileBlockToLibBlock(j);
+			if (mappedBlock.has_value())
+				entryDataPointerPos[i][*mappedBlock] = writer.GetOffset();
+
+			writer.Write<uint32_t>(0);
 		}
 
 		writer.Write(e.importOffset);
 		writer.Write(e.resourceType);
 		writer.Write(e.importCount);
 
-		writer.Seek(2, std::ios::cur); // padding
+		writer.Write<uint8_t>(0); // flags
+		writer.Write<uint8_t>((m_flags & Flags::MultistreamBundle) ? e.streamIndex : 0);
+
+		writer.Align(8);
 
 		entryIter = std::next(entryIter);
 	}
 
 	// DATA BLOCK
-	for (auto i = 0; i < 3; i++)
+	for (uint8_t i = 0; i < blocks; i++)
 	{
 		size_t alignment = (i == 0) ? 16 : 0x80;
 		writer.Align(alignment);
@@ -203,45 +226,58 @@ bool BND2::Save(binaryio::BinaryWriter &writer)
 		const auto blockStart = writer.GetOffset32();
 		writer.VisitAndWrite<uint32_t>(fileBlockPointerPos[i], blockStart);
 
-		entryIter = m_entries.begin();
+		const auto mappedBlock = MapFileBlockToLibBlock(i);
+		if (!mappedBlock.has_value())
+			break;
+
+		entryIter = sortedKeys.begin();
 		for (auto j = 0U; j < m_entries.size(); j++)
 		{
-			const auto &e = entryIter->second;
+			const auto &e = m_entries.at(*entryIter);
 
-			const auto &descriptor = e.descriptors[i];
-			const auto readSize = (m_flags & Bundle::Flags::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
+			const auto &descriptor = e.descriptors[*mappedBlock];
 
-			if (readSize > 0)
+			if (descriptor.onDiskSize > 0)
 			{
 				writer.Align(alignment);
-				writer.VisitAndWrite<uint32_t>(entryDataPointerPos[j][i], writer.GetOffset32() - blockStart);
-				writer.Write(descriptor.data.get(), readSize);
+				writer.VisitAndWrite<uint32_t>(entryDataPointerPos[j][*mappedBlock], writer.GetOffset32() - blockStart);
+				writer.Write(descriptor.data.get(), descriptor.onDiskSize);
 			}
 
 			entryIter = std::next(entryIter);
 		}
 	}
 
+	// RESOURCE STRING TABLE (version >= 3)
+	if (m_version >= 3)
+	{
+		writer.VisitAndWrite<uint32_t>(rstPointerPos, writer.GetOffset32());
+		if (m_flags & Flags::HasDebugData)
+		{
+			writer.Write(GenerateDebugData());
+		}
+	}
+
 	return true;
 }
 
-std::optional<Bundle::Resource> BND2::GetResource(uint32_t resourceID) const
+std::optional<Resource> BND2::GetResource(ResourceID resourceID) const
 {
 	const auto it = m_entries.find(resourceID);
 	if (it == m_entries.end())
 		return {};
 
-	std::array<Bundle::Buffer, 3> buffers;
+	std::array<Buffer, 4> buffers;
 	for (const auto &memoryType : GetMemoryTypes())
 		buffers[LIBBNDL_TO_UNDERLYING(memoryType)] = GetBinary(resourceID, memoryType);
 
-	std::vector<Bundle::Import> imports;
+	std::vector<Import> imports;
 	const auto numImports = it->second.importCount;
 	if (numImports > 0)
 	{
 		imports.reserve(numImports);
 
-		binaryio::BinaryReader reader(buffers[0], m_platform != Bundle::Platform::PC ? std::endian::big : std::endian::little);
+		binaryio::BinaryReader reader(buffers[0], m_platform != Platform::PC ? std::endian::big : std::endian::little);
 		reader.Seek(it->second.importOffset);
 		for (auto i = 0U; i < numImports; i++)
 		{
@@ -254,5 +290,70 @@ std::optional<Bundle::Resource> BND2::GetResource(uint32_t resourceID) const
 		buffers[0] = { std::move(buffer), buffers[0].GetSize(), buffers[0].GetAlignment() };
 	}
 
-	return Bundle::Resource{ std::move(buffers), std::move(imports) };
+	return Resource{ std::move(buffers), std::move(imports), it->second.streamIndex };
+}
+
+std::vector<MemoryType> BND2::GetMemoryTypes() const
+{
+	auto types = Base::GetMemoryTypes();
+
+	if (m_version >= 3)
+	{
+		switch (m_platform)
+		{
+		case Platform::Xbox360:
+		case Platform::PS3:
+			types.reserve(types.capacity() + 1);
+			types.emplace_back(MemoryType::Disposable);
+			break;
+		}
+	}
+
+	return types;
+}
+
+std::optional<uint8_t> BND2::MapFileBlockToLibBlock(uint8_t block) const
+{
+	std::optional<MemoryType> mappedType = {};
+	switch (block)
+	{
+	case 0:
+		mappedType = MemoryType::MainMemory;
+		break;
+	case 1:
+		switch (m_platform)
+		{
+		case Platform::PS3:
+			mappedType = MemoryType::GraphicsSystem;
+			break;
+		case Platform::Xbox360:
+			mappedType = MemoryType::Physical;
+			break;
+		case Platform::PC:
+			mappedType = MemoryType::Disposable;
+			break;
+		}
+		break;
+	case 2:
+		switch (m_platform)
+		{
+		case Platform::PS3:
+			mappedType = MemoryType::GraphicsLocal;
+			break;
+		case Platform::Xbox360:
+			if (m_version >= 3)
+				mappedType = MemoryType::Disposable;
+			break;
+		}
+		break;
+	case 3:
+		if (m_version >= 3 && m_platform == Platform::PS3)
+			mappedType = MemoryType::Disposable;
+		break;
+	}
+
+	if (mappedType)
+		return LIBBNDL_TO_UNDERLYING(*mappedType);
+
+	return {};
 }

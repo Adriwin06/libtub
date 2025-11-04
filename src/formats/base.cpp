@@ -1,18 +1,21 @@
 #include "base.hpp"
+#include <iomanip>
 #include <limits>
+#include <regex>
+#include <pugixml.hpp>
 #include <zlib.h>
 
 using namespace libbndl;
 using namespace libbndl::Formats;
 
-Base::Base(uint32_t version, Bundle::Platform platform, Bundle::Flags flags)
+Base::Base(uint32_t version, Platform platform, Flags flags)
 {
 	m_version = version;
 	m_platform = platform;
 	m_flags = flags;
 }
 
-std::optional<ResourceDebugInfo> Base::GetResourceDebugInfo(uint32_t resourceID) const
+std::optional<ResourceDebugInfoEntry> Base::GetResourceDebugInfo(ResourceID resourceID) const
 {
 	const auto it = m_debugInfoEntries.find(resourceID);
 	if (it == m_debugInfoEntries.end())
@@ -21,7 +24,7 @@ std::optional<ResourceDebugInfo> Base::GetResourceDebugInfo(uint32_t resourceID)
 	return it->second;
 }
 
-std::optional<Bundle::ResourceType> Base::GetResourceType(uint32_t resourceID) const
+std::optional<uint32_t> Base::GetResourceType(ResourceID resourceID) const
 {
 	const auto it = m_entries.find(resourceID);
 	if (it == m_entries.end())
@@ -30,7 +33,7 @@ std::optional<Bundle::ResourceType> Base::GetResourceType(uint32_t resourceID) c
 	return it->second.resourceType;
 }
 
-Bundle::Buffer Base::GetBinary(uint32_t resourceID, Bundle::MemoryType memoryType) const
+Buffer Base::GetBinary(ResourceID resourceID, MemoryType memoryType) const
 {
 	const auto it = m_entries.find(resourceID);
 	if (it == m_entries.end())
@@ -48,25 +51,25 @@ Bundle::Buffer Base::GetBinary(uint32_t resourceID, Bundle::MemoryType memoryTyp
 
 	auto uncompressedBuffer = std::make_unique_for_overwrite<uint8_t[]>(uncompressedSize);
 
-	if (dataInfo.compressedSize > 0)
+	if (m_flags & Flags::Compressed)
 	{
-		assert(m_flags & Bundle::Flags::Compressed);
-
 		uLongf uncompressedSizeLong = uncompressedSize;
-		const auto ret = uncompress(uncompressedBuffer.get(), &uncompressedSizeLong, buffer.get(), static_cast<uLong>(dataInfo.compressedSize));
+		const auto ret = uncompress(uncompressedBuffer.get(), &uncompressedSizeLong, buffer.get(), static_cast<uLong>(dataInfo.onDiskSize));
 
 		assert(ret == Z_OK);
 		assert(uncompressedSize == uncompressedSizeLong);
 	}
 	else
 	{
+		assert(dataInfo.onDiskSize == dataInfo.uncompressedSize);
+
 		std::memcpy(uncompressedBuffer.get(), buffer.get(), uncompressedSize);
 	}
 
 	return { std::move(uncompressedBuffer), uncompressedSize, dataInfo.uncompressedAlignment };
 }
 
-bool Base::AddResource(uint32_t resourceID, const Bundle::Resource &resource, Bundle::ResourceType resourceType)
+bool Base::AddResource(ResourceID resourceID, const Resource &resource, uint32_t resourceType)
 {
 	const auto it = m_entries.find(resourceID);
 	if (it != m_entries.end() || resource.GetImports().size() > std::numeric_limits<uint16_t>::max())
@@ -75,23 +78,34 @@ bool Base::AddResource(uint32_t resourceID, const Bundle::Resource &resource, Bu
 	auto &e = m_entries[resourceID];
 	e.resourceType = resourceType;
 
+	if (!(m_flags & Flags::Compressed))
+	{
+		// If we're not compressing, we need to specify the on-disk alignment.
+		// It's not clear how this is determined (see below) so we'll just assume 1.
+		for (const auto &memoryType : GetMemoryTypes())
+		{
+			auto &descriptor = e.descriptors[LIBBNDL_TO_UNDERLYING(memoryType)];
+			descriptor.onDiskAlignment = 1;
+		}
+	}
+
 	return ReplaceResource(resourceID, resource);
 }
 
-bool Base::AddResourceDebugInfo(uint32_t resourceID, const std::string &name, const std::string &type)
+bool Base::AddResourceDebugInfo(ResourceID resourceID, const std::string &name, const std::string &type)
 {
 	const auto it = m_debugInfoEntries.find(resourceID);
 	if (it != m_debugInfoEntries.end())
 		return false;
 
-	ResourceDebugInfo &debugInfo = m_debugInfoEntries[resourceID];
+	auto &debugInfo = m_debugInfoEntries[resourceID];
 	debugInfo.name = name;
 	debugInfo.typeName = type;
 
 	return true;
 }
 
-bool Base::ReplaceResource(uint32_t resourceID, const Bundle::Resource &resource)
+bool Base::ReplaceResource(ResourceID resourceID, const Resource &resource)
 {
 	const auto it = m_entries.find(resourceID);
 	const auto &imports = resource.GetImports();
@@ -113,7 +127,9 @@ bool Base::ReplaceResource(uint32_t resourceID, const Bundle::Resource &resource
 		{
 			outDataInfo.data = nullptr;
 			outDataInfo.uncompressedSize = 0;
-			outDataInfo.compressedSize = 0;
+			outDataInfo.uncompressedAlignment = 1;
+			outDataInfo.onDiskSize = 0;
+			// The on-disk alignment can remain set even with 0 size.
 			continue;
 		}
 
@@ -121,13 +137,13 @@ bool Base::ReplaceResource(uint32_t resourceID, const Bundle::Resource &resource
 		size_t inSize;
 		std::unique_ptr<uint8_t[]> outBuffer;
 
-		if (AppendsImportsToResource() && memoryType == Bundle::MemoryType::MainMemory && !imports.empty())
+		if (AppendsImportsToResource() && memoryType == MemoryType::MainMemory && !imports.empty())
 		{
 			binaryio::BinaryWriter writer;
 			for (const auto &import : imports)
 			{
 				WriteImport(writer, import);
-				e.importHash &= import.GetResourceID();
+				e.importHash &= static_cast<uint64_t>(import.GetResourceID());
 			}
 			const auto depSize = writer.GetSize();
 			auto depStream = writer.GetStream();
@@ -152,7 +168,7 @@ bool Base::ReplaceResource(uint32_t resourceID, const Bundle::Resource &resource
 
 		const auto uncompressedSize = static_cast<uint32_t>(inSize);
 
-		if (m_flags & Bundle::Flags::Compressed)
+		if (m_flags & Flags::Compressed)
 		{
 			const auto compBufferSize = compressBound(static_cast<uLong>(inSize));
 			std::vector<uint8_t> compBuffer(compBufferSize);
@@ -168,12 +184,16 @@ bool Base::ReplaceResource(uint32_t resourceID, const Bundle::Resource &resource
 			outBuffer = std::make_unique_for_overwrite<uint8_t[]>(actualSize);
 			std::memcpy(outBuffer.get(), compBuffer.data(), actualSize);
 
-			outDataInfo.compressedSize = actualSize;
+			outDataInfo.onDiskSize = actualSize;
+			outDataInfo.onDiskAlignment = 1;
 		}
 		else
 		{
 			outBuffer = std::move(inBuffer);
-			outDataInfo.compressedSize = 0;
+			outDataInfo.onDiskSize = uncompressedSize;
+
+			// The on-disk alignment for BND2v2 this seems to always be 1. For BND2v3 it's often 16/80/80/80 but also still sometimes 1 (some GAMELOGIC).
+			// We'll just leave it as is if we're replacing.
 		}
 
 		outDataInfo.uncompressedSize = uncompressedSize;
@@ -184,9 +204,9 @@ bool Base::ReplaceResource(uint32_t resourceID, const Bundle::Resource &resource
 	return true;
 }
 
-std::vector<uint32_t> Base::GetResourceIDs() const
+std::vector<ResourceID> Base::GetResourceIDs() const
 {
-	std::vector<uint32_t> entries;
+	std::vector<ResourceID> entries;
 	for (const auto &e : m_entries)
 	{
 		entries.push_back(e.first);
@@ -194,9 +214,9 @@ std::vector<uint32_t> Base::GetResourceIDs() const
 	return entries;
 }
 
-std::map<Bundle::ResourceType, std::vector<uint32_t>> Base::GetResourceIDsByType() const
+std::map<uint32_t, std::vector<ResourceID>> Base::GetResourceIDsByType() const
 {
-	std::map<Bundle::ResourceType, std::vector<uint32_t>> entriesByResourceType;
+	std::map<uint32_t, std::vector<ResourceID>> entriesByResourceType;
 	for (const auto &e : m_entries)
 	{
 		entriesByResourceType[e.second.resourceType].push_back(e.first);
@@ -204,30 +224,76 @@ std::map<Bundle::ResourceType, std::vector<uint32_t>> Base::GetResourceIDsByType
 	return entriesByResourceType;
 }
 
-std::vector<Bundle::MemoryType> Base::GetMemoryTypes() const
+std::vector<MemoryType> Base::GetMemoryTypes() const
 {
-	std::vector<Bundle::MemoryType> types;
-	types.reserve(m_platform == Bundle::Platform::PS3 ? 3 : 2);
+	std::vector<MemoryType> types;
+	types.reserve(m_platform == Platform::PS3 ? 3 : 2);
 
-	types.emplace_back(Bundle::MemoryType::MainMemory);
-	types.emplace_back(Bundle::MemoryType::GraphicsSystem);
-	if (m_platform == Bundle::Platform::PS3)
-		types.emplace_back(Bundle::MemoryType::GraphicsLocal);
+	types.emplace_back(MemoryType::MainMemory);
+	switch (m_platform)
+	{
+	case Platform::PC:
+		types.emplace_back(MemoryType::Disposable);
+		break;
+	case Platform::Xbox360:
+		types.emplace_back(MemoryType::Physical);
+		break;
+	case Platform::PS3:
+		types.emplace_back(MemoryType::GraphicsSystem);
+		types.emplace_back(MemoryType::GraphicsLocal);
+		break;
+	}
 
 	return types;
+}
+
+void Base::ParseDebugData(const std::string &rstXML)
+{
+	pugi::xml_document doc;
+	if (doc.load_string(rstXML.c_str(), pugi::parse_minimal))
+	{
+		for (const auto &resource : doc.child("ResourceStringTable").children("Resource"))
+		{
+			const auto resourceID = ResourceID(std::stoull(resource.attribute("id").value(), nullptr, 16));
+			auto &debugInfo = m_debugInfoEntries[resourceID];
+			debugInfo.name = resource.attribute("name").value();
+			debugInfo.typeName = resource.attribute("type").value();
+		}
+	}
+}
+
+std::string Base::GenerateDebugData() const
+{
+	pugi::xml_document doc;
+	auto root = doc.append_child("ResourceStringTable");
+	for (const auto &entry : m_debugInfoEntries)
+	{
+		auto entryChild = root.append_child("Resource");
+
+		std::stringstream idStream;
+		idStream << std::hex << std::setw((entry.first.GetIDType() != ResourceID::EIDType::Normal) ? 16 : 8) << std::setfill('0') << static_cast<uint64_t>(entry.first);
+
+		entryChild.append_attribute("id").set_value(idStream.str().c_str());
+		entryChild.append_attribute("type").set_value(entry.second.typeName.c_str());
+		entryChild.append_attribute("name").set_value(entry.second.name.c_str());
+	}
+
+	std::stringstream out;
+	doc.save(out, "\t", pugi::format_indent | pugi::format_no_declaration, pugi::encoding_utf8);
+	return std::regex_replace(out.str(), std::regex(" />\n"), "/>\n");
 }
 
 ImportEntry Base::ReadImport(binaryio::BinaryReader &reader)
 {
 	const ImportEntry &dep = {
-		static_cast<uint32_t>(reader.Read<uint64_t>()),
+		ResourceID(reader.Read<uint64_t>()),
 		reader.Read<uint32_t>()
 	};
 	reader.Skip<uint32_t>();
 	return dep;
 }
 
-void Base::WriteImport(binaryio::BinaryWriter &writer, const Bundle::Import &import)
+void Base::WriteImport(binaryio::BinaryWriter &writer, const Import &import)
 {
 	writer.Write<uint64_t>(import.GetResourceID());
 	writer.Write(import.GetOffset());

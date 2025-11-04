@@ -1,6 +1,4 @@
 #include "bndl.hpp"
-#include <iomanip>
-#include <pugixml.hpp>
 
 using namespace libbndl;
 using namespace libbndl::Formats;
@@ -17,27 +15,27 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	if (m_version < 3 || m_version > 5)
 		return false;
 
-	m_platform = static_cast<Bundle::Platform>(0);
+	m_platform = static_cast<Platform>(0);
 	auto platformReader = reader.Copy();
 	for (const auto offset : { 0x4C, 0x58, 0x64 })
 	{
 		platformReader.Seek(offset);
-		const auto platform = platformReader.Read<Bundle::Platform>();
-		if (platform == Bundle::Platform::PC || platform == Bundle::Platform::Xbox360 || platform == Bundle::Platform::PS3)
+		const auto platform = platformReader.Read<Platform>();
+		if (platform == Platform::PC || platform == Platform::Xbox360 || platform == Platform::PS3)
 		{
 			m_platform = platform;
 			break;
 		}
 	}
-	if (m_platform == static_cast<Bundle::Platform>(0))
+	if (m_platform == static_cast<Platform>(0))
 		return false;
 
 	const auto numEntries = reader.Read<uint32_t>();
 
 	uint8_t blocks = 4;
-	if (m_platform == Bundle::Platform::Xbox360)
+	if (m_platform == Platform::Xbox360)
 		blocks = 5;
-	else if (m_platform == Bundle::Platform::PS3)
+	else if (m_platform == Platform::PS3)
 		blocks = 6;
 	std::array<uint32_t, 6> dataBlockSizes;
 	for (uint8_t i = 0; i < blocks; i++)
@@ -53,8 +51,8 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	reader.Skip<uint32_t>(); // import block
 	reader.Skip<uint32_t>(); // start of data block
 
-	m_platform = reader.Read<Bundle::Platform>();
-	if (m_platform != Bundle::Platform::PC && m_platform != Bundle::Platform::Xbox360 && m_platform != Bundle::Platform::PS3)
+	m_platform = reader.Read<Platform>();
+	if (m_platform != Platform::PC && m_platform != Platform::Xbox360 && m_platform != Platform::PS3)
 		return false;
 
 	auto compressed = 0U;
@@ -64,9 +62,9 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	{
 		compressed = reader.Read<uint32_t>(); // flags but compression is the only valid one
 		if (compressed)
-			m_flags = Bundle::Flags::Compressed;
+			m_flags = Flags::Compressed;
 		else
-			m_flags = static_cast<Bundle::Flags>(0);
+			m_flags = static_cast<Flags>(0);
 
 		reader.Skip<uint32_t>(); // number of compressed resources
 		uncompInfoOffset = reader.Read<uint32_t>();
@@ -83,9 +81,9 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	m_imports.clear();
 
 	reader.Seek(idListOffset);
-	std::vector<uint32_t> resourceIDs;
+	std::vector<ResourceID> resourceIDs;
 	for (auto i = 0U; i < numEntries; i++)
-		resourceIDs.push_back(static_cast<uint32_t>(reader.Read<uint64_t>()));
+		resourceIDs.push_back(ResourceID(reader.Read<uint64_t>()));
 
 	reader.Seek(idTableOffset);
 	for (const auto resourceID : resourceIDs)
@@ -94,39 +92,25 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 
 		reader.Skip<uint32_t>(); // runtime-only memory variable
 		e.importOffset = reader.Read<uint32_t>();
-		e.resourceType = reader.Read<Bundle::ResourceType>();
+		e.resourceType = reader.Read<uint32_t>();
 
-		if (compressed)
+		for (uint8_t j = 0; j < blocks; j++)
 		{
-			for (uint8_t j = 0; j < blocks; j++)
+			const auto mappedBlock = MapFileBlockToLibBlock(j);
+			if (!mappedBlock.has_value())
 			{
-				auto mappedBlock = MapBNDLBlockToBND2(j);
-				if (mappedBlock == -1)
-				{
-					reader.Verify<uint32_t>(0); // size
-					reader.Verify<uint32_t>(1); // alignment
-				}
-				else
-				{
-					e.descriptors[mappedBlock].compressedSize = reader.Read<uint32_t>();
-					reader.Skip<uint32_t>(); // alignment
-				}
+				reader.Verify<uint32_t>(0); // size
+				reader.Verify<uint32_t>(1); // alignment
 			}
-		}
-		else
-		{
-			for (uint8_t j = 0; j < blocks; j++)
+			else
 			{
-				auto mappedBlock = MapBNDLBlockToBND2(j);
-				if (mappedBlock == -1)
+				e.descriptors[*mappedBlock].onDiskSize = reader.Read<uint32_t>();
+				e.descriptors[*mappedBlock].onDiskAlignment = reader.Read<uint32_t>();
+
+				if (!compressed)
 				{
-					reader.Verify<uint32_t>(0); // size
-					reader.Verify<uint32_t>(1); // alignment
-				}
-				else
-				{
-					e.descriptors[mappedBlock].uncompressedSize = reader.Read<uint32_t>();
-					e.descriptors[mappedBlock].uncompressedAlignment = reader.Read<uint32_t>();
+					e.descriptors[*mappedBlock].uncompressedSize = e.descriptors[*mappedBlock].onDiskSize;
+					e.descriptors[*mappedBlock].uncompressedAlignment = e.descriptors[*mappedBlock].onDiskAlignment;
 				}
 			}
 		}
@@ -141,17 +125,16 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 			const auto readOffset = reader.Read<uint32_t>() + dataBlockStartOffset;
 			reader.Skip<uint32_t>(); // 1
 
-			auto mappedBlock = MapBNDLBlockToBND2(j);
-			if (mappedBlock == -1)
+			const auto mappedBlock = MapFileBlockToLibBlock(j);
+			if (!mappedBlock.has_value())
 			{
 				assert(dataBlockSizes[j] == 0);
 				continue;
 			}
 
-			auto &descriptor = e.descriptors[mappedBlock];
+			auto &descriptor = e.descriptors[*mappedBlock];
 
-			const auto readSize = compressed ? descriptor.compressedSize : descriptor.uncompressedSize;
-			if (readSize == 0)
+			if (descriptor.onDiskSize == 0)
 			{
 				descriptor.data = nullptr;
 				continue;
@@ -159,7 +142,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 
 			dataReader.Seek(readOffset); // Read offset
 
-			descriptor.data = std::unique_ptr<uint8_t[]>(dataReader.Read<uint8_t *>(readSize));
+			descriptor.data = std::unique_ptr<uint8_t[]>(dataReader.Read<uint8_t *>(descriptor.onDiskSize));
 		}
 
 		reader.Seek(0x4 * blocks, std::ios::cur); // memory address stuff
@@ -174,16 +157,16 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 
 			for (uint8_t j = 0; j < blocks; j++)
 			{
-				auto mappedBlock = MapBNDLBlockToBND2(j);
-				if (mappedBlock == -1)
+				const auto mappedBlock = MapFileBlockToLibBlock(j);
+				if (!mappedBlock.has_value())
 				{
 					reader.Verify<uint32_t>(0); // size
 					reader.Verify<uint32_t>(1); // alignment
 				}
 				else
 				{
-					e.descriptors[mappedBlock].uncompressedSize = reader.Read<uint32_t>();
-					e.descriptors[mappedBlock].uncompressedAlignment = reader.Read<uint32_t>();
+					e.descriptors[*mappedBlock].uncompressedSize = reader.Read<uint32_t>();
+					e.descriptors[*mappedBlock].uncompressedAlignment = reader.Read<uint32_t>();
 				}
 			}
 		}
@@ -203,11 +186,11 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 			m_imports[resourceID].emplace_back(ReadImport(reader));
 	}
 
-	auto rstFile = GetBinary(0xC039284A, Bundle::MemoryType::MainMemory);
+	auto rstFile = GetBinary(ResourceID(0xC039284A), MemoryType::MainMemory);
 	if (rstFile == nullptr)
 		return true;
 
-	m_flags |= Bundle::Flags::HasDebugData;
+	m_flags |= Flags::HasDebugData;
 
 	auto rstReader = binaryio::BinaryReader(rstFile);
 
@@ -221,38 +204,31 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	if (pos != std::string::npos)
 		rstXML.erase(pos, 23);
 
-	pugi::xml_document doc;
-	if (doc.load_string(rstXML.c_str(), pugi::parse_minimal))
-	{
-		for (const auto &resource : doc.child("ResourceStringTable").children("Resource"))
-		{
-			const auto resourceID = std::stoul(resource.attribute("id").value(), nullptr, 16);
-			auto &debugInfo = m_debugInfoEntries[resourceID];
-			debugInfo.name = resource.attribute("name").value();
-			debugInfo.typeName = resource.attribute("type").value();
-		}
-	}
+	ParseDebugData(rstXML);
 
-	m_entries.erase(0xC039284A);
+	m_entries.erase(ResourceID(0xC039284A));
 
 	return true;
 };
 
 bool BNDL::Save(binaryio::BinaryWriter &writer)
 {
-	// Only one flag is supported. Allow HasDebugData since we simulate it ourselves here.
-	if (BitScanReverse(static_cast<uint32_t>(m_flags & ~Bundle::Flags::HasDebugData)) >= 1)
+	if (m_version < 3 || m_version > 5)
 		return false;
 
-	if (m_version <= 3 && (m_flags & Bundle::Flags::Compressed))
+	// Only one flag is supported. Allow HasDebugData since we simulate it ourselves here.
+	if (BitScanReverse(static_cast<uint32_t>(m_flags & ~Flags::HasDebugData)) >= 1)
+		return false;
+
+	if (m_version <= 3 && (m_flags & Flags::Compressed))
 		return false; // Invalid combination
 
-	writer.SetEndian(m_platform != Bundle::Platform::PC ? std::endian::big : std::endian::little);
+	writer.SetEndian(m_platform != Platform::PC ? std::endian::big : std::endian::little);
 
 	writer.Write("bndl", 4);
 	writer.Write<uint32_t>(m_version);
 
-	const bool writeDebugData = !m_debugInfoEntries.empty() && !(m_flags & Bundle::Flags::Compressed); // TODO: is the compressed check accurate?
+	const bool writeDebugData = !m_debugInfoEntries.empty() && !(m_flags & Flags::Compressed); // TODO: is the compressed check accurate?
 	auto entryCount = static_cast<uint32_t>(m_entries.size());
 	if (writeDebugData)
 		entryCount++;
@@ -260,17 +236,17 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	writer.Write<uint32_t>(entryCount);
 
 	uint8_t blocks = 4;
-	if (m_platform == Bundle::Platform::Xbox360)
+	if (m_platform == Platform::Xbox360)
 		blocks = 5;
-	else if (m_platform == Bundle::Platform::PS3)
+	else if (m_platform == Platform::PS3)
 		blocks = 6;
 
-	std::array<size_t, 3> dataBlockDescriptorsPos;
+	std::array<size_t, 4> dataBlockDescriptorsPos;
 	for (uint8_t i = 0; i < blocks; i++)
 	{
-		auto mappedBlock = MapBNDLBlockToBND2(i);
-		if (mappedBlock != -1)
-			dataBlockDescriptorsPos[mappedBlock] = writer.GetOffset();
+		const auto mappedBlock = MapFileBlockToLibBlock(i);
+		if (mappedBlock.has_value())
+			dataBlockDescriptorsPos[*mappedBlock] = writer.GetOffset();
 		writer.Write<uint32_t>(0); // size
 		writer.Write<uint32_t>(1); // alignment
 	}
@@ -295,8 +271,8 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 
 	if (m_version >= 4)
 	{
-		writer.Write<uint32_t>(m_flags & ~Bundle::Flags::HasDebugData);
-		writer.Write<uint32_t>((m_flags & Bundle::Flags::Compressed) ? entryCount : 0);
+		writer.Write<uint32_t>(m_flags & ~Flags::HasDebugData);
+		writer.Write<uint32_t>((m_flags & Flags::Compressed) ? entryCount : 0);
 		uncompInfoBlockPointerPos = writer.GetOffset();
 		writer.Write<uint32_t>(0); // will write later, but only if needed
 	}
@@ -321,23 +297,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	// Prepare ResourceStringTable
 	if (writeDebugData)
 	{
-		pugi::xml_document doc;
-		auto root = doc.append_child("ResourceStringTable");
-		for (const auto &entry : m_debugInfoEntries)
-		{
-			auto entryChild = root.append_child("Resource");
-
-			std::stringstream idStream;
-			idStream << std::hex << std::setw(8) << std::setfill('0') << entry.first;
-
-			entryChild.append_attribute("id").set_value(idStream.str().c_str());
-			entryChild.append_attribute("type").set_value(entry.second.typeName.c_str());
-			entryChild.append_attribute("name").set_value(entry.second.name.c_str());
-		}
-
-		std::stringstream out;
-		doc.save(out, "\t", pugi::format_indent | pugi::format_no_declaration, pugi::encoding_utf8);
-		const auto outStr = out.str();
+		const auto outStr = GenerateDebugData();
 
 		auto debugDataWriter = binaryio::BinaryWriter();
 		debugDataWriter.Write(static_cast<uint32_t>(outStr.size()));
@@ -347,8 +307,8 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 		const auto data = stream.view();
 		const auto dataSize = data.size();
 
-		auto &e = m_entries[0xFFFFFFFF]; // HACK
-		e.resourceType = Bundle::TextFile;
+		auto &e = m_entries[ResourceID(0xFFFFFFFF)]; // HACK
+		e.resourceType = ResourceType::Burnout::TextFile;
 
 		e.descriptors[0].data = std::make_unique_for_overwrite<uint8_t[]>(dataSize);
 		std::memcpy(e.descriptors[0].data.get(), data.data(), dataSize);
@@ -363,9 +323,9 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	struct FilePointerPosHelper
 	{
 		size_t importPointerPos;
-		std::array<size_t, 3> dataBlockPointerPos;
+		std::array<size_t, 4> dataBlockPointerPos;
 	};
-	std::map<uint32_t, FilePointerPosHelper> filePointerPosMap;
+	std::map<ResourceID, FilePointerPosHelper> filePointerPosMap;
 	for (const auto &entry : m_entries)
 	{
 		writer.Write<uint32_t>(0); // Ignore
@@ -379,26 +339,25 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 
 		for (uint8_t i = 0; i < blocks; i++)
 		{
-			auto mappedBlock = MapBNDLBlockToBND2(i);
-			if (mappedBlock == -1)
+			const auto mappedBlock = MapFileBlockToLibBlock(i);
+			if (!mappedBlock.has_value())
 			{
 				writer.Write<uint32_t>(0); // size
 				writer.Write<uint32_t>(1); // alignment
 			}
 			else
 			{
-				const auto &descriptor = entry.second.descriptors[mappedBlock];
-				const auto size = (m_flags & Bundle::Flags::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
-				writer.Write<uint32_t>(size);
-				writer.Write<uint32_t>((size == 0) ? 1 : descriptor.uncompressedAlignment);
+				const auto &descriptor = entry.second.descriptors[*mappedBlock];
+				writer.Write<uint32_t>(descriptor.onDiskSize);
+				writer.Write<uint32_t>((descriptor.onDiskSize == 0) ? 1 : descriptor.onDiskAlignment);
 			}
 		}
 
 		for (uint8_t i = 0; i < blocks; i++)
 		{
-			auto mappedBlock = MapBNDLBlockToBND2(i);
-			if (mappedBlock != -1)
-				posHelper.dataBlockPointerPos[mappedBlock] = writer.GetOffset();
+			const auto mappedBlock = MapFileBlockToLibBlock(i);
+			if (mappedBlock.has_value())
+				posHelper.dataBlockPointerPos[*mappedBlock] = writer.GetOffset();
 
 			writer.Write<uint32_t>(0);
 			writer.Write<uint32_t>(1); // constant
@@ -410,22 +369,22 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	}
 
 	// UNCOMPRESSED SIZE INFO
-	if (m_flags & Bundle::Flags::Compressed)
+	if (m_flags & Flags::Compressed)
 	{
 		writer.VisitAndWrite<uint32_t>(uncompInfoBlockPointerPos, writer.GetOffset32());
 		for (const auto &entry : m_entries)
 		{
 			for (uint8_t i = 0; i < blocks; i++)
 			{
-				auto mappedBlock = MapBNDLBlockToBND2(i);
-				if (mappedBlock == -1)
+				const auto mappedBlock = MapFileBlockToLibBlock(i);
+				if (!mappedBlock.has_value())
 				{
 					writer.Write<uint32_t>(0); // size
 					writer.Write<uint32_t>(1); // alignment
 				}
 				else
 				{
-					const auto &descriptor = entry.second.descriptors[mappedBlock];
+					const auto &descriptor = entry.second.descriptors[*mappedBlock];
 					writer.Write<uint32_t>(descriptor.uncompressedSize);
 					writer.Write<uint32_t>((descriptor.uncompressedSize == 0) ? 1 : descriptor.uncompressedAlignment);
 				}
@@ -456,19 +415,18 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	// DATA
 	writer.VisitAndWrite<uint32_t>(dataBlockPointerPos, writer.GetOffset32());
 	uint32_t blockStartOffset = 0;
-	for (auto i = 0; i < 3; i++)
+	for (auto i = 0; i < 4; i++)
 	{
 		for (const auto &entry : m_entries)
 		{
 			const auto &e = entry.second;
 
 			const auto &descriptor = e.descriptors[i];
-			const auto readSize = (m_flags & Bundle::Flags::Compressed) ? descriptor.compressedSize : descriptor.uncompressedSize;
 
-			if (readSize > 0)
+			if (descriptor.onDiskSize > 0)
 			{
 				writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first).dataBlockPointerPos[i], writer.GetOffset32() - blockStartOffset);
-				writer.Write(descriptor.data.get(), readSize);
+				writer.Write(descriptor.data.get(), descriptor.onDiskSize);
 			}
 		}
 
@@ -478,50 +436,55 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 		blockStartOffset = writer.GetOffset32();
 	}
 
-	m_entries.erase(0xFFFFFFFF);
+	m_entries.erase(ResourceID(0xFFFFFFFF));
 
 	return true;
 }
 
-int8_t BNDL::MapBNDLBlockToBND2(uint8_t block) const
+std::optional<uint8_t> BNDL::MapFileBlockToLibBlock(uint8_t block) const
 {
-	auto mappedBlock = static_cast<int8_t>(block);
-	switch (m_platform)
+	std::optional<MemoryType> mappedType = {};
+	switch (block)
 	{
-	case Bundle::Platform::PC:
-		if (block >= 3)
-			mappedBlock = -1;
+	case 0:
+		mappedType = MemoryType::MainMemory;
 		break;
-	case Bundle::Platform::Xbox360:
-		if (block == 1 || block >= 4)
-			mappedBlock = -1;
-		else if (block != 0)
-			mappedBlock = block - 1;
+	case 1:
+		mappedType = MemoryType::Disposable;
 		break;
-	case Bundle::Platform::PS3:
-		if ((block >= 1 && block <= 3) || block >= 6)
-			mappedBlock = -1;
-		else if (block != 0)
-			mappedBlock = block - 3;
+	case 2:
+		if (m_platform == Platform::Xbox360)
+			mappedType = MemoryType::Physical;
 		break;
-	default:
-		mappedBlock = -1;
+	case 3:
+		break;
+	case 4:
+		if (m_platform == Platform::PS3)
+			mappedType = MemoryType::GraphicsSystem;
+		break;
+	case 5:
+		if (m_platform == Platform::PS3)
+			mappedType = MemoryType::GraphicsLocal;
 		break;
 	}
-	return mappedBlock;
+
+	if (mappedType)
+		return LIBBNDL_TO_UNDERLYING(*mappedType);
+
+	return {};
 }
 
-std::optional<Bundle::Resource> BNDL::GetResource(uint32_t resourceID) const
+std::optional<Resource> BNDL::GetResource(ResourceID resourceID) const
 {
 	const auto it = m_entries.find(resourceID);
 	if (it == m_entries.end())
 		return {};
 
-	std::array<Bundle::Buffer, 3> buffers;
+	std::array<Buffer, 4> buffers;
 	for (const auto &memoryType : GetMemoryTypes())
 		buffers[LIBBNDL_TO_UNDERLYING(memoryType)] = GetBinary(resourceID, memoryType);
 
-	std::vector<Bundle::Import> imports;
+	std::vector<Import> imports;
 	if (it->second.importCount > 0)
 	{
 		const auto &importEntries = m_imports.at(resourceID);
@@ -529,5 +492,5 @@ std::optional<Bundle::Resource> BNDL::GetResource(uint32_t resourceID) const
 			imports.emplace_back(importEntry.resourceID, importEntry.offset);
 	}
 
-	return Bundle::Resource{ std::move(buffers), std::move(imports) };
+	return Resource{ std::move(buffers), std::move(imports), 0 };
 }
