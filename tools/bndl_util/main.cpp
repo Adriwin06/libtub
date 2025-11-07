@@ -1,6 +1,7 @@
 #include <libbndl/bundle.hpp>
 #include <cctype>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
@@ -38,6 +39,31 @@ static std::string cleanResourceNameForIO(const std::string &resourceName)
 	}
 
 	return cleanResourceNameForHash(resourceName);
+}
+
+static std::string resourceIDToString(const ResourceID &resourceID)
+{
+	return std::format("0x{:{}X}", static_cast<uint64_t>(resourceID), (resourceID.GetIDType() != ResourceID::EIDType::Normal) ? 16 : 8);
+}
+
+static std::string getDebugName(const Bundle &arch, const std::optional<ResourceDebugInfo> &debugInfo, const std::string &fallback)
+{
+	std::ostringstream name;
+	if (debugInfo)
+	{
+		const auto cleanedName = cleanResourceNameForIO(debugInfo->GetName());
+
+		if (arch.GetResourceDebugInfo(cleanResourceNameForHash(debugInfo->GetName())) && std::all_of(cleanedName.begin(), cleanedName.end(), [](char c) { return std::isalnum(c) || c == '.' || c == '-' || c == '_' || c == '~' || c == '(' || c == ')' || c == ',' || c == '+' || c == ' '; }))
+			name << cleanedName;
+		else
+			name << fallback;
+	}
+	else
+	{
+		name << fallback;
+	}
+
+	return name.str();
 }
 
 int main(int argc, char** argv)
@@ -103,19 +129,22 @@ int main(int argc, char** argv)
 			std::cout.fill(' ');
 			for (const auto &resourceID : arch.GetResourceIDs())
 			{
-				const auto debugInfo = arch.GetResourceDebugInfo(resourceID);
-				const auto resourceType = *arch.GetResourceType(resourceID);
-				std::ostringstream name;
-				if (debugInfo)
-					name << debugInfo->GetName();
-				else
-					name << std::hex << static_cast<uint64_t>(resourceID);
-				std::ostringstream typeName;
-				if (debugInfo)
-					typeName << debugInfo->GetTypeName();
-				else
-					typeName << std::hex << resourceType;
-				std::cout << std::left << std::setw(70) << name.str() << std::right << typeName.str() << std::endl;
+				for (const auto &streamIndex : arch.GetResourceStreamIndices(resourceID))
+				{
+					const auto debugInfo = arch.GetResourceDebugInfo(resourceID, streamIndex);
+					const auto resourceType = *arch.GetResourceType(resourceID, streamIndex);
+					std::ostringstream name;
+					if (debugInfo)
+						name << debugInfo->GetName();
+					else
+						name << std::hex << static_cast<uint64_t>(resourceID);
+					std::ostringstream typeName;
+					if (debugInfo)
+						typeName << debugInfo->GetTypeName();
+					else
+						typeName << std::hex << resourceType;
+					std::cout << std::left << std::setw(70) << name.str() << std::right << typeName.str() << std::endl;
+				}
 			}
 		}
 		else if (extract)
@@ -123,8 +152,8 @@ int main(int argc, char** argv)
 			std::cout << "Extracting..." << std::endl;
 
 			std::vector<std::filesystem::path> archives;
-			if (file.has_value())
-				archives.emplace_back(file.value());
+			if (file)
+				archives.emplace_back(*file);
 			else
 				for (const auto &entry : std::filesystem::recursive_directory_iterator(all.value()))
 					if (std::filesystem::is_regular_file(entry))
@@ -134,16 +163,16 @@ int main(int argc, char** argv)
 			{
 				if (!arch.Load(archive.string()))
 				{
-					if (file.has_value())
+					if (file)
 					{
-						std::cout << "Failed to open " << file.value() << std::endl;
+						std::cout << "Failed to open " << *file << std::endl;
 						return EXIT_FAILURE;
 					}
 					continue;
 				}
 
 				std::filesystem::path archiveExtractDir;
-				if (file.has_value())
+				if (file)
 					archiveExtractDir = extractDir;
 				else
 					archiveExtractDir = extractDir / std::filesystem::relative(archive, all.value()).replace_extension();
@@ -161,7 +190,7 @@ int main(int argc, char** argv)
 				pugi::xml_document doc;
 				auto configRoot = doc.append_child("Bundle");
 
-				configRoot.append_attribute("version").set_value((std::to_string(static_cast<uint32_t>(arch.GetMagicNumber())) + "." + std::to_string(arch.GetVersion())).c_str());
+				configRoot.append_attribute("version").set_value((std::to_string(static_cast<uint32_t>(arch.GetMagicNumber())) + "." + std::to_string(arch.GetVersion())));
 
 				const auto platform = arch.GetPlatform();
 				std::string platformName;
@@ -176,12 +205,18 @@ int main(int argc, char** argv)
 				case Platform::PS3:
 					platformName = "PS3";
 					break;
+				case Platform::PSVita:
+					platformName = "PS Vita";
+					break;
+				case Platform::WiiU:
+					platformName = "Wii U";
+					break;
 				}
-				configRoot.append_attribute("platform").set_value(platformName.c_str());
+				configRoot.append_attribute("platform").set_value(platformName);
 
 				const auto flags = arch.GetFlags();
 				configRoot.append_attribute("compressed").set_value(!!(flags & Flags::Compressed));
-				if (arch.GetMagicNumber() == MagicNumber::BND2)
+				if (arch.GetMagicNumber() == MagicNumber::BND2 && arch.GetVersion() < 5)
 				{
 					configRoot.append_attribute("mainMemOptimised").set_value(!!(flags & Flags::MainMemOptimised));
 					configRoot.append_attribute("graphicsMemOptimised").set_value(!!(flags & Flags::GraphicsMemOptimised));
@@ -192,6 +227,26 @@ int main(int argc, char** argv)
 					configRoot.append_attribute("nonAsynchFixupRequired").set_value(!!(flags & Flags::NonAsynchFixupRequired));
 					configRoot.append_attribute("multistreamBundle").set_value(!!(flags &Flags::MultistreamBundle));
 					configRoot.append_attribute("deltaBundle").set_value(!!(flags &Flags::DeltaBundle));
+					if (arch.GetVersion() >= 5)
+					{
+						if (flags & Flags::ContainsDefaultResource)
+						{
+							const auto debugInfo = arch.GetResourceDebugInfo(arch.GetDefaultResourceID());
+							const auto defaultName = getDebugName(arch, debugInfo, resourceIDToString(arch.GetDefaultResourceID()));
+							configRoot.append_attribute("defaultResource").set_value(defaultName);
+							configRoot.append_attribute("defaultStreamIndex").set_value(arch.GetDefaultResourceStreamIndex());
+						}
+
+						for (uint8_t i = 0; i < 4; i++)
+						{
+							const auto streamName = arch.GetStreamName(i);
+							if (streamName.empty())
+								continue;
+
+							auto entryChild = configRoot.append_child("Stream");
+							entryChild.append_attribute("name").set_value(streamName);
+						}
+					}
 				}
 
 				std::ofstream manifest(archiveExtractDir / "_manifest.txt");
@@ -199,141 +254,121 @@ int main(int argc, char** argv)
 
 				for (const auto &resourceID : arch.GetResourceIDs())
 				{
-					const auto debugInfo = arch.GetResourceDebugInfo(resourceID);
-					const auto resourceType = *arch.GetResourceType(resourceID);
-					const auto data = *arch.GetResource(resourceID);
-
-					std::ostringstream idStrStream;
-					idStrStream << "0x" << std::hex << std::setw((resourceID.GetIDType() != ResourceID::EIDType::Normal) ? 16 : 8)
-						<< std::setfill('0') << std::uppercase << static_cast<uint64_t>(resourceID);
-
-					std::ostringstream name;
-					if (debugInfo)
-					{
-						const auto cleanedName = cleanResourceNameForIO(debugInfo->GetName());
-
-						if (arch.GetResourceDebugInfo(cleanResourceNameForHash(debugInfo->GetName())) && std::all_of(cleanedName.begin(), cleanedName.end(), [](char c) { return std::isalnum(c) || c == '.' || c == '-' || c == '_' || c == '~' || c == '(' || c == ')' || c == ',' || c == '+' || c == ' '; }))
-							name << cleanedName;
-						else
-							name << idStrStream.str();
-					}
-					else
-					{
-						name << idStrStream.str();
-					}
-
-					const auto &fileTypeNames = (arch.IsNeedForSpeedEra() ? g_nfsFileTypeNames : g_burnoutFileTypeNames);
-					const auto it = fileTypeNames.find(resourceType);
-					std::ostringstream pathTypeNameStream;
-					if (it == fileTypeNames.end())
-						pathTypeNameStream << "Type " << std::hex << std::setw(2) << std::setfill('0') << std::uppercase << resourceType;
-					else
-						pathTypeNameStream << it->second;
-					const auto fileExtractDir = archiveExtractDir / pathTypeNameStream.str();
-
-					try
-					{
-						std::filesystem::create_directory(fileExtractDir);
-					}
-					catch (std::filesystem::filesystem_error &e)
-					{
-						std::cout << "Failed to create directory: " << e.what() << std::endl;
-						return EXIT_FAILURE;
-					}
-
-					for (const auto& memoryType : arch.GetMemoryTypes())
-					{
-						const auto &buffer = data.GetBinary(memoryType);
-						if (buffer == nullptr)
-							continue;
-
-						std::string typeExt;
-						switch (memoryType)
-						{
-						case MemoryType::MainMemory:
-							typeExt = ".mainmem";
-							break;
-						case MemoryType::GraphicsSystem:
-							if (platform == Platform::PS3)
-								typeExt = ".gfxsysmem";
-							else if (platform == Platform::Xbox360)
-								typeExt = ".physical";
-							else
-								typeExt = ".dummy";
-							break;
-						case MemoryType::GraphicsLocal:
-							if (platform == Platform::PS3)
-								typeExt = ".gfxlocalmem";
-							else
-								typeExt = ".dummy";
-							break;
-						case MemoryType::Disposable:
-							typeExt = ".disposable";
-							break;
-						}
-
-						const auto path = fileExtractDir / (name.str() + typeExt + ".bin");
-						std::ofstream outfile(path, std::ios::out | std::ios::binary);
-						outfile.write(reinterpret_cast<const char *>(buffer.GetData()), buffer.GetSize());
-						outfile.close();
-						if (outfile.fail())
-						{
-							char errmsg[94];
-							strerror_s(errmsg, sizeof(errmsg) / sizeof(errmsg[0]), errno);
-							std::cout << "Failed to create extract " << path << ": " << errmsg << std::endl;
-						}
-					}
-
-					const auto &imports = data.GetImports();
-					if (!imports.empty())
-					{
-						pugi::xml_document importsDoc;
-						auto importsRoot = importsDoc.append_child("Imports");
-
-						for (const auto &import : imports)
-						{
-							auto entryChild = importsRoot.append_child("Import");
-							const auto depDebugInfo = arch.GetResourceDebugInfo(import.GetResourceID());
-							if (depDebugInfo)
-							{
-								entryChild.append_attribute("name").set_value(depDebugInfo->GetName().c_str());
-							}
-							else
-							{
-								std::ostringstream depIdStrStream;
-								depIdStrStream << "0x" << std::hex << std::setw((import.GetResourceID().GetIDType() != ResourceID::EIDType::Normal) ? 16 : 8)
-									<< std::setfill('0') << std::uppercase << static_cast<uint64_t>(import.GetResourceID());
-								entryChild.append_attribute("id").set_value(depIdStrStream.str().c_str());
-							}
-
-							std::ostringstream offsetStrStream;
-							offsetStrStream << "0x" << std::hex << std::setw(8) << std::setfill('0') << std::uppercase << import.GetOffset();
-							entryChild.append_attribute("offset").set_value(offsetStrStream.str().c_str());
-
-							if (arch.IsNeedForSpeedEra())
-								entryChild.append_attribute("resourceHandle").set_value(import.GetImportType() == Import::ImportType::ResourceHandle);
-						}
-
-						std::ofstream outfile(fileExtractDir / (name.str() + ".imports.xml"));
-						importsDoc.save(outfile, "\t", pugi::format_indent | pugi::format_no_declaration, pugi::encoding_utf8);
-					}
-
-					auto entryChild = configRoot.append_child("Resource");
-					if (!debugInfo || debugInfo->GetName().empty())
-						entryChild.append_attribute("id").set_value(idStrStream.str().c_str());
-					else
-						entryChild.append_attribute("name").set_value(debugInfo->GetName().c_str());
-					if (!debugInfo || debugInfo->GetTypeName().empty())
-						entryChild.append_attribute("typeDebugName").set_value(pathTypeNameStream.str().c_str());
-					else
-						entryChild.append_attribute("typeDebugName").set_value(debugInfo->GetTypeName().c_str());
-					if (arch.IsNeedForSpeedEra() && (flags & Flags::MultistreamBundle))
-						entryChild.append_attribute("streamIndex").set_value(data.GetStreamIndex());
-
+					const auto idStr = resourceIDToString(resourceID);
 					auto debugName = std::string();
-					if (debugInfo && !debugInfo->GetName().empty())
-						debugName = debugInfo->GetName();
-					manifest << idStrStream.str() << " = " << debugName << std::endl;
+
+					for (const auto &streamIndex : arch.GetResourceStreamIndices(resourceID))
+					{
+						const auto debugInfo = arch.GetResourceDebugInfo(resourceID);
+						const auto resourceType = *arch.GetResourceType(resourceID, streamIndex);
+						const auto data = *arch.GetResource(resourceID, streamIndex);
+
+						auto name = getDebugName(arch, debugInfo, idStr);
+						if (streamIndex > 0)
+							name += ".stream" + std::to_string(streamIndex);
+
+						const auto &fileTypeNames = (arch.IsNeedForSpeedEra() ? g_nfsFileTypeNames : g_burnoutFileTypeNames);
+						const auto it = fileTypeNames.find(resourceType);
+						std::ostringstream pathTypeNameStream;
+						if (it == fileTypeNames.end())
+							pathTypeNameStream << "Type " << std::hex << std::setw(2) << std::setfill('0') << std::uppercase << resourceType;
+						else
+							pathTypeNameStream << it->second;
+						const auto fileExtractDir = archiveExtractDir / pathTypeNameStream.str();
+
+						try
+						{
+							std::filesystem::create_directory(fileExtractDir);
+						}
+						catch (std::filesystem::filesystem_error &e)
+						{
+							std::cout << "Failed to create directory: " << e.what() << std::endl;
+							return EXIT_FAILURE;
+						}
+
+						for (const auto &memoryType : arch.GetMemoryTypes())
+						{
+							const auto &buffer = data.GetBinary(memoryType);
+							if (buffer == nullptr)
+								continue;
+
+							std::string typeExt;
+							switch (memoryType)
+							{
+							case MemoryType::MainMemory:
+								typeExt = ".mainmem";
+								break;
+							case MemoryType::GraphicsSystem:
+								if (platform == Platform::PS3)
+									typeExt = ".gfxsysmem";
+								else if (platform == Platform::Xbox360)
+									typeExt = ".physical";
+								else
+									typeExt = ".dummy";
+								break;
+							case MemoryType::GraphicsLocal:
+								if (platform == Platform::PS3)
+									typeExt = ".gfxlocalmem";
+								else
+									typeExt = ".dummy";
+								break;
+							case MemoryType::Disposable:
+								typeExt = ".disposable";
+								break;
+							}
+
+							const auto path = fileExtractDir / (name + typeExt + ".bin");
+							std::ofstream outfile(path, std::ios::out | std::ios::binary);
+							outfile.write(reinterpret_cast<const char *>(buffer.GetData()), buffer.GetSize());
+							outfile.close();
+							if (outfile.fail())
+								std::cout << "Failed to create extract " << path << ": " << std::error_code(errno, std::generic_category()) << std::endl;
+						}
+
+						const auto &imports = data.GetImports();
+						if (!imports.empty())
+						{
+							pugi::xml_document importsDoc;
+							auto importsRoot = importsDoc.append_child("Imports");
+
+							for (const auto &import : imports)
+							{
+								auto entryChild = importsRoot.append_child("Import");
+								const auto depDebugInfo = arch.GetResourceDebugInfo(import.GetResourceID());
+								if (depDebugInfo)
+									entryChild.append_attribute("name").set_value(depDebugInfo->GetName());
+								else
+									entryChild.append_attribute("id").set_value(resourceIDToString(import.GetResourceID()));
+
+								std::ostringstream offsetStrStream;
+								offsetStrStream << "0x" << std::hex << std::setw(8) << std::setfill('0') << std::uppercase << import.GetOffset();
+								entryChild.append_attribute("offset").set_value(offsetStrStream.str());
+
+								if (arch.IsNeedForSpeedEra())
+									entryChild.append_attribute("resourceHandle").set_value(import.GetImportType() == Import::ImportType::ResourceHandle);
+							}
+
+							std::ofstream outfile(fileExtractDir / (name + ".imports.xml"));
+							importsDoc.save(outfile, "\t", pugi::format_indent | pugi::format_no_declaration, pugi::encoding_utf8);
+						}
+
+						auto entryChild = configRoot.append_child("Resource");
+						if (!debugInfo || debugInfo->GetName().empty())
+							entryChild.append_attribute("id").set_value(idStr);
+						else
+							entryChild.append_attribute("name").set_value(debugInfo->GetName());
+						if (!debugInfo || debugInfo->GetTypeName().empty())
+							entryChild.append_attribute("typeDebugName").set_value(pathTypeNameStream.str());
+						else
+							entryChild.append_attribute("typeDebugName").set_value(debugInfo->GetTypeName());
+						if (arch.IsNeedForSpeedEra() && (flags & Flags::MultistreamBundle))
+							entryChild.append_attribute("streamIndex").set_value(streamIndex);
+
+						if (debugInfo && !debugInfo->GetName().empty())
+							debugName = debugInfo->GetName();
+					}
+
+					manifest << idStr << " = " << debugName << std::endl;
 				}
 
 				std::ofstream outfile(archiveExtractDir / "_config.xml");

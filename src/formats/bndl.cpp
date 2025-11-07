@@ -1,18 +1,20 @@
 #include "bndl.hpp"
+#include <cstring>
 
 using namespace libbndl;
 using namespace libbndl::Formats;
 
 bool BNDL::Load(binaryio::BinaryReader &reader)
 {
-	m_version = reader.Read<uint32_t>();
-	if ((m_version & 0xFFFF) == 0)
+	auto version = reader.Read<uint32_t>();
+	if ((version & 0xFFFF) == 0)
 	{
 		reader.SwapEndian();
 		reader.Seek(-4, std::ios::cur);
-		m_version = reader.Read<uint32_t>();
+		version = reader.Read<uint32_t>();
 	}
-	if (m_version < 3 || m_version > 5)
+	m_version = static_cast<uint16_t>(version);
+	if (version < 3 || version > 5)
 		return false;
 
 	m_platform = static_cast<Platform>(0);
@@ -20,7 +22,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	for (const auto offset : { 0x4C, 0x58, 0x64 })
 	{
 		platformReader.Seek(offset);
-		const auto platform = platformReader.Read<Platform>();
+		const auto platform = static_cast<Platform>(platformReader.Read<uint32_t>());
 		if (platform == Platform::PC || platform == Platform::Xbox360 || platform == Platform::PS3)
 		{
 			m_platform = platform;
@@ -51,9 +53,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	reader.Skip<uint32_t>(); // import block
 	reader.Skip<uint32_t>(); // start of data block
 
-	m_platform = reader.Read<Platform>();
-	if (m_platform != Platform::PC && m_platform != Platform::Xbox360 && m_platform != Platform::PS3)
-		return false;
+	reader.Verify(static_cast<uint32_t>(m_platform));
 
 	auto compressed = 0U;
 	auto uncompInfoOffset = 0U;
@@ -88,7 +88,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	reader.Seek(idTableOffset);
 	for (const auto resourceID : resourceIDs)
 	{
-		auto &e = m_entries[resourceID];
+		auto &e = m_entries[{ resourceID, static_cast<uint8_t>(0) }];
 
 		reader.Skip<uint32_t>(); // runtime-only memory variable
 		e.importOffset = reader.Read<uint32_t>();
@@ -97,7 +97,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 		for (uint8_t j = 0; j < blocks; j++)
 		{
 			const auto mappedBlock = MapFileBlockToLibBlock(j);
-			if (!mappedBlock.has_value())
+			if (!mappedBlock)
 			{
 				reader.Verify<uint32_t>(0); // size
 				reader.Verify<uint32_t>(1); // alignment
@@ -126,7 +126,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 			reader.Skip<uint32_t>(); // 1
 
 			const auto mappedBlock = MapFileBlockToLibBlock(j);
-			if (!mappedBlock.has_value())
+			if (!mappedBlock)
 			{
 				assert(dataBlockSizes[j] == 0);
 				continue;
@@ -153,12 +153,12 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 		reader.Seek(uncompInfoOffset);
 		for (const auto resourceID : resourceIDs)
 		{
-			auto &e = m_entries[resourceID];
+			auto &e = m_entries[{ resourceID, static_cast<uint8_t>(0) }];
 
 			for (uint8_t j = 0; j < blocks; j++)
 			{
 				const auto mappedBlock = MapFileBlockToLibBlock(j);
-				if (!mappedBlock.has_value())
+				if (!mappedBlock)
 				{
 					reader.Verify<uint32_t>(0); // size
 					reader.Verify<uint32_t>(1); // alignment
@@ -174,7 +174,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 
 	for (const auto resourceID : resourceIDs)
 	{
-		auto &e = m_entries[resourceID];
+		auto &e = m_entries[{ resourceID, static_cast<uint8_t>(0) }];
 		const auto depOffset = e.importOffset;
 		if (depOffset == 0)
 			continue;
@@ -186,7 +186,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 			m_imports[resourceID].emplace_back(ReadImport(reader));
 	}
 
-	auto rstFile = GetBinary(ResourceID(0xC039284A), MemoryType::MainMemory);
+	auto rstFile = GetBinary({ ResourceID(0xC039284A), static_cast<uint8_t>(0) }, MemoryType::MainMemory);
 	if (rstFile == nullptr)
 		return true;
 
@@ -206,7 +206,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 
 	ParseDebugData(rstXML);
 
-	m_entries.erase(ResourceID(0xC039284A));
+	m_entries.erase({ ResourceID(0xC039284A), static_cast<uint8_t>(0) });
 
 	return true;
 };
@@ -223,7 +223,10 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	if (m_version <= 3 && (m_flags & Flags::Compressed))
 		return false; // Invalid combination
 
-	writer.SetEndian(m_platform != Platform::PC ? std::endian::big : std::endian::little);
+	if (!IsValidPlatform())
+		return false;
+
+	writer.SetEndian(GetPlatformEndian());
 
 	writer.Write("bndl", 4);
 	writer.Write<uint32_t>(m_version);
@@ -245,7 +248,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	for (uint8_t i = 0; i < blocks; i++)
 	{
 		const auto mappedBlock = MapFileBlockToLibBlock(i);
-		if (mappedBlock.has_value())
+		if (mappedBlock)
 			dataBlockDescriptorsPos[*mappedBlock] = writer.GetOffset();
 		writer.Write<uint32_t>(0); // size
 		writer.Write<uint32_t>(1); // alignment
@@ -265,7 +268,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	auto dataBlockPointerPos = writer.GetOffset();
 	writer.Seek(4, std::ios::cur);
 
-	writer.Write(m_platform);
+	writer.Write<uint32_t>(m_platform);
 
 	size_t uncompInfoBlockPointerPos = 0;
 
@@ -289,7 +292,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	writer.VisitAndWrite<uint32_t>(idListPointerPos, writer.GetOffset32());
 	for (const auto &entry : m_entries)
 	{
-		writer.Write<uint64_t>(entry.first);
+		writer.Write<uint64_t>(entry.first.first);
 	}
 	if (writeDebugData)
 		writer.Write<uint64_t>(0xC039284A);
@@ -307,7 +310,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 		const auto data = stream.view();
 		const auto dataSize = data.size();
 
-		auto &e = m_entries[ResourceID(0xFFFFFFFF)]; // HACK
+		auto &e = m_entries[{ ResourceID(0xFFFFFFFF), static_cast<uint8_t>(0) }]; // HACK
 		e.resourceType = ResourceType::Burnout::TextFile;
 
 		e.descriptors[0].data = std::make_unique_for_overwrite<uint8_t[]>(dataSize);
@@ -330,7 +333,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	{
 		writer.Write<uint32_t>(0); // Ignore
 
-		auto &posHelper = filePointerPosMap[entry.first];
+		auto &posHelper = filePointerPosMap[entry.first.first];
 
 		posHelper.importPointerPos = writer.GetOffset();
 		writer.Write<uint32_t>(0);
@@ -340,7 +343,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 		for (uint8_t i = 0; i < blocks; i++)
 		{
 			const auto mappedBlock = MapFileBlockToLibBlock(i);
-			if (!mappedBlock.has_value())
+			if (!mappedBlock)
 			{
 				writer.Write<uint32_t>(0); // size
 				writer.Write<uint32_t>(1); // alignment
@@ -356,7 +359,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 		for (uint8_t i = 0; i < blocks; i++)
 		{
 			const auto mappedBlock = MapFileBlockToLibBlock(i);
-			if (mappedBlock.has_value())
+			if (mappedBlock)
 				posHelper.dataBlockPointerPos[*mappedBlock] = writer.GetOffset();
 
 			writer.Write<uint32_t>(0);
@@ -377,7 +380,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 			for (uint8_t i = 0; i < blocks; i++)
 			{
 				const auto mappedBlock = MapFileBlockToLibBlock(i);
-				if (!mappedBlock.has_value())
+				if (!mappedBlock)
 				{
 					writer.Write<uint32_t>(0); // size
 					writer.Write<uint32_t>(1); // alignment
@@ -396,11 +399,11 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	writer.VisitAndWrite<uint32_t>(importBlockPointerPos, writer.GetOffset32());
 	for (const auto &entry : m_entries)
 	{
-		const auto &imports = m_imports[entry.first];
+		const auto &imports = m_imports[entry.first.first];
 		if (imports.empty())
 			continue;
 
-		writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first).importPointerPos, writer.GetOffset32());
+		writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first.first).importPointerPos, writer.GetOffset32());
 
 		writer.Write(static_cast<uint32_t>(imports.size()));
 		writer.Write<uint32_t>(0); // padding
@@ -415,8 +418,12 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	// DATA
 	writer.VisitAndWrite<uint32_t>(dataBlockPointerPos, writer.GetOffset32());
 	uint32_t blockStartOffset = 0;
-	for (auto i = 0; i < 4; i++)
+	for (uint8_t i = 0; i < blocks; i++)
 	{
+		const auto mappedBlock = MapFileBlockToLibBlock(i);
+		if (!mappedBlock)
+			continue;
+
 		for (const auto &entry : m_entries)
 		{
 			const auto &e = entry.second;
@@ -425,18 +432,18 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 
 			if (descriptor.onDiskSize > 0)
 			{
-				writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first).dataBlockPointerPos[i], writer.GetOffset32() - blockStartOffset);
+				writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first.first).dataBlockPointerPos[*mappedBlock], writer.GetOffset32() - blockStartOffset);
 				writer.Write(descriptor.data.get(), descriptor.onDiskSize);
 			}
 		}
 
 		const auto size = writer.GetOffset32() - blockStartOffset;
-		writer.VisitAndWrite<uint32_t>(dataBlockDescriptorsPos[i], size);
-		writer.VisitAndWrite<uint32_t>(dataBlockDescriptorsPos[i], (size == 0) ? 1 : ((i >= 1) ? 4096 : 1024)); // TODO: This changes and I don't know the pattern.
+		writer.VisitAndWrite<uint32_t>(dataBlockDescriptorsPos[*mappedBlock], size);
+		writer.VisitAndWrite<uint32_t>(dataBlockDescriptorsPos[*mappedBlock], (size == 0) ? 1 : ((*mappedBlock >= 1) ? 4096 : 1024)); // TODO: This changes and I don't know the pattern.
 		blockStartOffset = writer.GetOffset32();
 	}
 
-	m_entries.erase(ResourceID(0xFFFFFFFF));
+	m_entries.erase({ ResourceID(0xFFFFFFFF), static_cast<uint8_t>(0) });
 
 	return true;
 }
@@ -474,23 +481,23 @@ std::optional<uint8_t> BNDL::MapFileBlockToLibBlock(uint8_t block) const
 	return {};
 }
 
-std::optional<Resource> BNDL::GetResource(ResourceID resourceID) const
+std::optional<Resource> BNDL::GetResource(ResourceKey resourceKey) const
 {
-	const auto it = m_entries.find(resourceID);
+	const auto it = m_entries.find(resourceKey);
 	if (it == m_entries.end())
 		return {};
 
 	std::array<Buffer, 4> buffers;
 	for (const auto &memoryType : GetMemoryTypes())
-		buffers[LIBBNDL_TO_UNDERLYING(memoryType)] = GetBinary(resourceID, memoryType);
+		buffers[LIBBNDL_TO_UNDERLYING(memoryType)] = GetBinary(resourceKey, memoryType);
 
 	std::vector<Import> imports;
 	if (it->second.importCount > 0)
 	{
-		const auto &importEntries = m_imports.at(resourceID);
+		const auto &importEntries = m_imports.at(resourceKey.first);
 		for (const auto &importEntry : importEntries)
 			imports.emplace_back(importEntry.resourceID, importEntry.offset);
 	}
 
-	return Resource{ std::move(buffers), std::move(imports), 0 };
+	return Resource{ std::move(buffers), std::move(imports) };
 }

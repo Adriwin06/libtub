@@ -1,10 +1,6 @@
-# Purpose of this project
-This project is aimed at reading BUNDLE archives used in Burnout Paradise.
-The project is used in [libapt2](https://github.com/Bo98/libapt2) but might be helpful for others for usage.
+# libbndl
 
-# Build status
-[![Build Status](https://travis-ci.org/Bo98/libbndl.svg?branch=master)](https://travis-ci.org/Bo98/libbndl)
-[![Build status](https://ci.appveyor.com/api/projects/status/9ek63lhv0inwcxxr?svg=true)](https://ci.appveyor.com/project/Bo98/libbndl)
+A library to read Bundle archives used in titles made by Criterion Games, such as Burnout Paradise, Need For Speed: Hot Pursuit (2010) and Need for Speed: Most Wanted (2012).
 
 # How to build
 
@@ -18,18 +14,27 @@ $ cmake --build .
 
 ```c++
 #include <libbndl/bundle.hpp>
-#include <iostream>
 
-int main(int argc,char** argv)
+int main(int argc, char **argv)
 {
     // Create a bundle instance
-    libbndl::Bundle arch;
+    libbndl::Bundle bundle;
+
     // Load the archive
-    arch.Load(argv[1]);
-    // Load an entry from the archive
-    EntryData *entry = arch.GetBinary(argv[2]);
-    // etc.
-    // Remember to delete the EntryData and its data members.
-    // ...
+    if (!bundle.Load(argv[1]))
+		return -1;
+
+    // Load a resource from the archive
+    const auto resource = bundle.GetResource(argv[2]);
+	if (!resource)
+		return -2;
+
+	// Get the data from the resource binary that's assigned to main memory
+	const auto buffer = resource->GetBinary(libbndl::MemoryType::MainMemory);
+
+	// On the buffer you can use operator[], standard iterator functions or call GetData() to get the underlying pointer.
+	// Consider using https://github.com/Bo98/libbinaryio to parse the underlying data structures in the resource.
 }
 ```
+
+You can also create new bundles or modify existing ones. See [bundle.hpp](include/libbndl/bundle.hpp) for more information.

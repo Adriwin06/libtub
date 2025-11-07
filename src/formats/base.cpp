@@ -1,6 +1,8 @@
 #include "base.hpp"
-#include <iomanip>
+#include <cstring>
+#include <format>
 #include <limits>
+#include <ranges>
 #include <regex>
 #include <pugixml.hpp>
 #include <zlib.h>
@@ -8,34 +10,34 @@
 using namespace libbndl;
 using namespace libbndl::Formats;
 
-Base::Base(uint32_t version, Platform platform, Flags flags)
+Base::Base(uint16_t version, Platform platform, Flags flags)
 {
 	m_version = version;
 	m_platform = platform;
 	m_flags = flags;
 }
 
-std::optional<ResourceDebugInfoEntry> Base::GetResourceDebugInfo(ResourceID resourceID) const
+std::optional<ResourceDebugInfoEntry> Base::GetResourceDebugInfo(ResourceKey resourceKey) const
 {
-	const auto it = m_debugInfoEntries.find(resourceID);
+	const auto it = m_debugInfoEntries.find(resourceKey);
 	if (it == m_debugInfoEntries.end())
 		return {};
 
 	return it->second;
 }
 
-std::optional<uint32_t> Base::GetResourceType(ResourceID resourceID) const
+std::optional<uint32_t> Base::GetResourceType(ResourceKey resourceKey) const
 {
-	const auto it = m_entries.find(resourceID);
+	const auto it = m_entries.find(resourceKey);
 	if (it == m_entries.end())
 		return {};
 
 	return it->second.resourceType;
 }
 
-Buffer Base::GetBinary(ResourceID resourceID, MemoryType memoryType) const
+Buffer Base::GetBinary(ResourceKey resourceKey, MemoryType memoryType) const
 {
-	const auto it = m_entries.find(resourceID);
+	const auto it = m_entries.find(resourceKey);
 	if (it == m_entries.end())
 		return {};
 
@@ -54,7 +56,7 @@ Buffer Base::GetBinary(ResourceID resourceID, MemoryType memoryType) const
 	if (m_flags & Flags::Compressed)
 	{
 		uLongf uncompressedSizeLong = uncompressedSize;
-		const auto ret = uncompress(uncompressedBuffer.get(), &uncompressedSizeLong, buffer.get(), static_cast<uLong>(dataInfo.onDiskSize));
+		[[maybe_unused]] const auto ret = uncompress(uncompressedBuffer.get(), &uncompressedSizeLong, buffer.get(), static_cast<uLong>(dataInfo.onDiskSize));
 
 		assert(ret == Z_OK);
 		assert(uncompressedSize == uncompressedSizeLong);
@@ -69,13 +71,13 @@ Buffer Base::GetBinary(ResourceID resourceID, MemoryType memoryType) const
 	return { std::move(uncompressedBuffer), uncompressedSize, dataInfo.uncompressedAlignment };
 }
 
-bool Base::AddResource(ResourceID resourceID, const Resource &resource, uint32_t resourceType)
+bool Base::AddResource(ResourceKey resourceKey, const Resource &resource, uint32_t resourceType)
 {
-	const auto it = m_entries.find(resourceID);
+	const auto it = m_entries.find(resourceKey);
 	if (it != m_entries.end() || resource.GetImports().size() > std::numeric_limits<uint16_t>::max())
 		return false;
 
-	auto &e = m_entries[resourceID];
+	auto &e = it->second;
 	e.resourceType = resourceType;
 
 	if (!(m_flags & Flags::Compressed))
@@ -89,25 +91,25 @@ bool Base::AddResource(ResourceID resourceID, const Resource &resource, uint32_t
 		}
 	}
 
-	return ReplaceResource(resourceID, resource);
+	return ReplaceResource(resourceKey, resource);
 }
 
-bool Base::AddResourceDebugInfo(ResourceID resourceID, const std::string &name, const std::string &type)
+bool Base::AddResourceDebugInfo(ResourceKey resourceKey, const std::string &name, const std::string &type)
 {
-	const auto it = m_debugInfoEntries.find(resourceID);
+	const auto it = m_debugInfoEntries.find(resourceKey);
 	if (it != m_debugInfoEntries.end())
 		return false;
 
-	auto &debugInfo = m_debugInfoEntries[resourceID];
+	auto &debugInfo = it->second;
 	debugInfo.name = name;
 	debugInfo.typeName = type;
 
 	return true;
 }
 
-bool Base::ReplaceResource(ResourceID resourceID, const Resource &resource)
+bool Base::ReplaceResource(ResourceKey resourceKey, const Resource &resource)
 {
-	const auto it = m_entries.find(resourceID);
+	const auto it = m_entries.find(resourceKey);
 	const auto &imports = resource.GetImports();
 	if (it == m_entries.end() || imports.size() > std::numeric_limits<uint16_t>::max())
 		return false;
@@ -209,7 +211,7 @@ std::vector<ResourceID> Base::GetResourceIDs() const
 	std::vector<ResourceID> entries;
 	for (const auto &e : m_entries)
 	{
-		entries.push_back(e.first);
+		entries.push_back(e.first.first);
 	}
 	return entries;
 }
@@ -219,15 +221,41 @@ std::map<uint32_t, std::vector<ResourceID>> Base::GetResourceIDsByType() const
 	std::map<uint32_t, std::vector<ResourceID>> entriesByResourceType;
 	for (const auto &e : m_entries)
 	{
-		entriesByResourceType[e.second.resourceType].push_back(e.first);
+		entriesByResourceType[e.second.resourceType].push_back(e.first.first);
 	}
 	return entriesByResourceType;
+}
+
+std::vector<uint8_t> Base::GetResourceStreamIndices(ResourceID resourceID) const
+{
+	std::vector<uint8_t> indices;
+	for (const auto &e : m_entries)
+	{
+		if (e.first.first == resourceID)
+			indices.push_back(e.first.second);
+	}
+	return indices;
+}
+
+ResourceID Base::GetDefaultResourceID() const
+{
+	return ResourceID(0);
+}
+
+int32_t Base::GetDefaultResourceStreamIndex() const
+{
+	return 0;
+}
+
+std::string Base::GetStreamName(uint8_t) const
+{
+	return "";
 }
 
 std::vector<MemoryType> Base::GetMemoryTypes() const
 {
 	std::vector<MemoryType> types;
-	types.reserve(m_platform == Platform::PS3 ? 3 : 2);
+	types.reserve((m_platform == Platform::PC || m_platform == Platform::Xbox360) ? 2 : 3);
 
 	types.emplace_back(MemoryType::MainMemory);
 	switch (m_platform)
@@ -239,12 +267,30 @@ std::vector<MemoryType> Base::GetMemoryTypes() const
 		types.emplace_back(MemoryType::Physical);
 		break;
 	case Platform::PS3:
+	case Platform::PSVita:
 		types.emplace_back(MemoryType::GraphicsSystem);
 		types.emplace_back(MemoryType::GraphicsLocal);
+		break;
+	case Platform::WiiU:
+		types.emplace_back(MemoryType::Mem1);
+		types.emplace_back(MemoryType::GraphicsMem2);
 		break;
 	}
 
 	return types;
+}
+
+bool Base::IsValidPlatform() const
+{
+	return m_platform == Platform::PC || m_platform == Platform::Xbox360 || m_platform == Platform::PS3;
+}
+
+std::endian Base::GetPlatformEndian() const
+{
+	if (m_platform == Platform::PC || m_platform == Platform::PSVita)
+		return std::endian::little;
+
+	return std::endian::big;
 }
 
 void Base::ParseDebugData(const std::string &rstXML)
@@ -252,10 +298,37 @@ void Base::ParseDebugData(const std::string &rstXML)
 	pugi::xml_document doc;
 	if (doc.load_string(rstXML.c_str(), pugi::parse_minimal))
 	{
+		uint8_t lastStreamIndex = 0;
+
 		for (const auto &resource : doc.child("ResourceStringTable").children("Resource"))
 		{
 			const auto resourceID = ResourceID(std::stoull(resource.attribute("id").value(), nullptr, 16));
-			auto &debugInfo = m_debugInfoEntries[resourceID];
+
+			const auto streamIndexAttr = resource.attribute("streamIndex");
+			uint8_t streamIndex = 0;
+			if (streamIndexAttr)
+			{
+				if (std::string(streamIndexAttr.value()) == "importEntry")
+				{
+					streamIndex = lastStreamIndex;
+				}
+				else
+				{
+					const auto candidateStreamIndex = streamIndexAttr.as_uint();
+					if (candidateStreamIndex < kStreamLimit)
+						streamIndex = static_cast<uint8_t>(candidateStreamIndex);
+				}
+
+				lastStreamIndex = streamIndex;
+			}
+			else
+			{
+				const auto streamIndices = GetResourceStreamIndices(resourceID);
+				if (!streamIndices.empty())
+					streamIndex = streamIndices.front();
+			}
+
+			auto &debugInfo = m_debugInfoEntries[{ resourceID, streamIndex }];
 			debugInfo.name = resource.attribute("name").value();
 			debugInfo.typeName = resource.attribute("type").value();
 		}
@@ -266,21 +339,36 @@ std::string Base::GenerateDebugData() const
 {
 	pugi::xml_document doc;
 	auto root = doc.append_child("ResourceStringTable");
-	for (const auto &entry : m_debugInfoEntries)
+
+	for (const auto &key : SortedDebugDataKeys())
 	{
+		const auto &entry = m_debugInfoEntries.at(key);
+
 		auto entryChild = root.append_child("Resource");
-
-		std::stringstream idStream;
-		idStream << std::hex << std::setw((entry.first.GetIDType() != ResourceID::EIDType::Normal) ? 16 : 8) << std::setfill('0') << static_cast<uint64_t>(entry.first);
-
-		entryChild.append_attribute("id").set_value(idStream.str().c_str());
-		entryChild.append_attribute("type").set_value(entry.second.typeName.c_str());
-		entryChild.append_attribute("name").set_value(entry.second.name.c_str());
+		for (const auto &attr : GetDebugDataAttributes(key, entry))
+		{
+			entryChild.append_attribute(attr.first).set_value(attr.second);
+		}
 	}
 
 	std::stringstream out;
 	doc.save(out, "\t", pugi::format_indent | pugi::format_no_declaration, pugi::encoding_utf8);
 	return std::regex_replace(out.str(), std::regex(" />\n"), "/>\n");
+}
+
+std::vector<ResourceKey> Base::SortedDebugDataKeys() const
+{
+	const auto keys = std::views::keys(m_debugInfoEntries);
+	return std::vector<ResourceKey>{ keys.begin(), keys.end() };
+}
+
+std::vector<std::pair<std::string, std::string>> Base::GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugInfoEntry &debugInfo) const
+{
+	return std::vector<std::pair<std::string, std::string>> {
+		{ "id", std::format("{:0{}x}", static_cast<uint64_t>(resourceKey.first), (resourceKey.first.GetIDType() != ResourceID::EIDType::Normal) ? 16 : 8) },
+		{ "type", debugInfo.typeName },
+		{ "name", debugInfo.name },
+	};
 }
 
 ImportEntry Base::ReadImport(binaryio::BinaryReader &reader)

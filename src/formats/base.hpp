@@ -8,6 +8,7 @@
 #include <optional>
 #include <stdint.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #ifndef __has_builtin
@@ -33,6 +34,8 @@ namespace libbndl
 			return result;
 		}
 
+		using ResourceKey = std::pair<ResourceID, uint8_t>;
+
 		struct ResourceData
 		{
 			uint32_t uncompressedSize;
@@ -51,8 +54,6 @@ namespace libbndl
 			uint32_t importOffset;
 			uint32_t resourceType;
 			uint16_t importCount;
-
-			uint8_t streamIndex;
 		};
 
 		struct ResourceDebugInfoEntry
@@ -71,46 +72,58 @@ namespace libbndl
 		{
 		public:
 			Base() = default;
-			Base(uint32_t version, Platform platform, Flags flags);
+			Base(uint16_t version, Platform platform, Flags flags);
 			virtual ~Base() = default;
 
 			virtual bool Load(binaryio::BinaryReader &reader) = 0;
 			virtual bool Save(binaryio::BinaryWriter &reader) = 0;
 
 			[[nodiscard]] virtual constexpr MagicNumber GetMagicNumber() const = 0;
-			[[nodiscard]] constexpr uint32_t GetVersion() const { return m_version; }
+			[[nodiscard]] constexpr uint16_t GetVersion() const { return m_version; }
 			[[nodiscard]] constexpr Platform GetPlatform() const { return m_platform; }
 			[[nodiscard]] constexpr Flags GetFlags() const { return m_flags; }
 
-			[[nodiscard]] std::optional<ResourceDebugInfoEntry> GetResourceDebugInfo(ResourceID resourceID) const;
-			[[nodiscard]] std::optional<uint32_t> GetResourceType(ResourceID resourceID) const;
-			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceID resourceID) const = 0;
-			[[nodiscard]] Buffer GetBinary(ResourceID resourceID, MemoryType memoryType) const;
+			[[nodiscard]] std::optional<ResourceDebugInfoEntry> GetResourceDebugInfo(ResourceKey resourceKey) const;
+			[[nodiscard]] std::optional<uint32_t> GetResourceType(ResourceKey resourceKey) const;
+			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceKey resourceKey) const = 0;
+			[[nodiscard]] Buffer GetBinary(ResourceKey resourceKey, MemoryType memoryType) const;
 
-			bool AddResource(ResourceID resourceID, const Resource &data, uint32_t resourceType);
-			bool AddResourceDebugInfo(ResourceID resourceID, const std::string &name, const std::string &type);
+			bool AddResource(ResourceKey resourceKey, const Resource &data, uint32_t resourceType);
+			bool AddResourceDebugInfo(ResourceKey resourceID, const std::string &name, const std::string &type);
 
-			bool ReplaceResource(ResourceID resourceID, const Resource &data);
+			bool ReplaceResource(ResourceKey resourceKey, const Resource &data);
 
 			[[nodiscard]] std::vector<ResourceID> GetResourceIDs() const;
 			[[nodiscard]] std::map<uint32_t, std::vector<ResourceID>> GetResourceIDsByType() const;
+			[[nodiscard]] std::vector<uint8_t> GetResourceStreamIndices(ResourceID resourceID) const;
+
+			[[nodiscard]] virtual ResourceID GetDefaultResourceID() const;
+			[[nodiscard]] virtual int32_t GetDefaultResourceStreamIndex() const;
+			[[nodiscard]] virtual std::string GetStreamName(uint8_t index) const;
 
 			[[nodiscard]] virtual std::vector<MemoryType> GetMemoryTypes() const;
 
 		protected:
-			std::map<ResourceID, ResourceEntry> m_entries;
-			std::map<ResourceID, ResourceDebugInfoEntry> m_debugInfoEntries;
+			static constexpr const uint8_t kStreamLimit = 4;
 
-			uint32_t m_version;
+			std::map<ResourceKey, ResourceEntry> m_entries;
+			std::map<ResourceKey, ResourceDebugInfoEntry> m_debugInfoEntries;
+
+			uint16_t m_version;
 			Platform m_platform;
 			Flags m_flags;
 
 			virtual constexpr bool AppendsImportsToResource() const = 0;
+			virtual bool IsValidPlatform() const;
+
+			std::endian GetPlatformEndian() const;
 
 			void ParseDebugData(const std::string &rstXML);
 			[[nodiscard]] std::string GenerateDebugData() const;
+			virtual std::vector<ResourceKey> SortedDebugDataKeys() const;
+			virtual std::vector<std::pair<std::string, std::string>> GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugInfoEntry &debugInfo) const;
 
-			static [[nodiscard]] ImportEntry ReadImport(binaryio::BinaryReader &reader);
+			[[nodiscard]] static ImportEntry ReadImport(binaryio::BinaryReader &reader);
 			static void WriteImport(binaryio::BinaryWriter &writer, const Import &import);
 		};
 	}

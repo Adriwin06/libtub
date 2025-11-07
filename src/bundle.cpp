@@ -12,7 +12,7 @@ using namespace libbndl;
 
 Bundle::Bundle() = default;
 
-Bundle::Bundle(MagicNumber magicNumber, uint32_t version, Platform platform, Flags flags)
+Bundle::Bundle(MagicNumber magicNumber, uint16_t version, Platform platform, Flags flags)
 {
 	switch (magicNumber)
 	{
@@ -86,7 +86,7 @@ MagicNumber Bundle::GetMagicNumber() const
 	return m_impl->GetMagicNumber();
 }
 
-uint32_t Bundle::GetVersion() const
+uint16_t Bundle::GetVersion() const
 {
 	return m_impl->GetVersion();
 }
@@ -117,78 +117,78 @@ ResourceID Bundle::HashResourceName(std::string resourceName) const
 	return ResourceID(crc32_z(0, reinterpret_cast<const Bytef *>(resourceName.c_str()), resourceName.length()));
 }
 
-std::optional<Resource> Bundle::GetResource(const std::string &resourceName) const
+std::optional<Resource> Bundle::GetResource(const std::string &resourceName, uint8_t streamIndex) const
 {
-	return GetResource(HashResourceName(resourceName));
+	return GetResource(HashResourceName(resourceName), streamIndex);
 }
 
-std::optional<Resource> Bundle::GetResource(ResourceID resourceID) const
+std::optional<Resource> Bundle::GetResource(ResourceID resourceID, uint8_t streamIndex) const
 {
-	return m_impl->GetResource(resourceID);
+	return m_impl->GetResource({ resourceID, streamIndex });
 }
 
-Buffer Bundle::GetBinary(const std::string &resourceName, MemoryType memoryType) const
+Buffer Bundle::GetBinary(const std::string &resourceName, MemoryType memoryType, uint8_t streamIndex) const
 {
-	return GetBinary(HashResourceName(resourceName), memoryType);
+	return GetBinary(HashResourceName(resourceName), memoryType, streamIndex);
 }
 
-Buffer Bundle::GetBinary(ResourceID resourceID, MemoryType memoryType) const
+Buffer Bundle::GetBinary(ResourceID resourceID, MemoryType memoryType, uint8_t streamIndex) const
 {
-	return m_impl->GetBinary(resourceID, memoryType);
+	return m_impl->GetBinary({ resourceID, streamIndex }, memoryType);
 }
 
-std::optional<ResourceDebugInfo> Bundle::GetResourceDebugInfo(const std::string &resourceName) const
+std::optional<ResourceDebugInfo> Bundle::GetResourceDebugInfo(const std::string &resourceName, uint8_t streamIndex) const
 {
-	return GetResourceDebugInfo(HashResourceName(resourceName));
+	return GetResourceDebugInfo(HashResourceName(resourceName), streamIndex);
 }
 
-std::optional<ResourceDebugInfo> Bundle::GetResourceDebugInfo(ResourceID resourceID) const
+std::optional<ResourceDebugInfo> Bundle::GetResourceDebugInfo(ResourceID resourceID, uint8_t streamIndex) const
 {
-	const auto &internalDebugInfo = m_impl->GetResourceDebugInfo(resourceID);
-	if (!internalDebugInfo.has_value())
+	const auto &internalDebugInfo = m_impl->GetResourceDebugInfo({ resourceID, streamIndex });
+	if (!internalDebugInfo)
 		return {};
 
 	return ResourceDebugInfo{ internalDebugInfo->name, internalDebugInfo->typeName };
 }
 
-std::optional<uint32_t> Bundle::GetResourceType(const std::string &resourceName) const
+std::optional<uint32_t> Bundle::GetResourceType(const std::string &resourceName, uint8_t streamIndex) const
 {
-	return GetResourceType(HashResourceName(resourceName));
+	return GetResourceType(HashResourceName(resourceName), streamIndex);
 }
 
-std::optional<uint32_t> Bundle::GetResourceType(ResourceID resourceID) const
+std::optional<uint32_t> Bundle::GetResourceType(ResourceID resourceID, uint8_t streamIndex) const
 {
-	return m_impl->GetResourceType(resourceID);
+	return m_impl->GetResourceType({ resourceID, streamIndex });
 }
 
-bool Bundle::AddResource(const std::string &resourceName, const Resource &resource, uint32_t resourceType)
+bool Bundle::AddResource(const std::string &resourceName, const Resource &resource, uint32_t resourceType, uint8_t streamIndex)
 {
-	return AddResource(HashResourceName(resourceName), resource, resourceType);
+	return AddResource(HashResourceName(resourceName), resource, resourceType, streamIndex);
 }
 
-bool Bundle::AddResource(ResourceID resourceID, const Resource &resource, uint32_t resourceType)
+bool Bundle::AddResource(ResourceID resourceID, const Resource &resource, uint32_t resourceType, uint8_t streamIndex)
 {
-	return m_impl->AddResource(resourceID, resource, resourceType);
+	return m_impl->AddResource({ resourceID, streamIndex }, resource, resourceType);
 }
 
-bool Bundle::AddResourceDebugInfo(const std::string &resourceName, const std::string &name, const std::string &type)
+bool Bundle::AddResourceDebugInfo(const std::string &resourceName, const std::string &name, const std::string &type, uint8_t streamIndex)
 {
-	return AddResourceDebugInfo(HashResourceName(resourceName), name, type);
+	return AddResourceDebugInfo(HashResourceName(resourceName), name, type, streamIndex);
 }
 
-bool Bundle::AddResourceDebugInfo(ResourceID resourceID, const std::string &name, const std::string &type)
+bool Bundle::AddResourceDebugInfo(ResourceID resourceID, const std::string &name, const std::string &type, uint8_t streamIndex)
 {
-	return m_impl->AddResourceDebugInfo(resourceID, name, type);
+	return m_impl->AddResourceDebugInfo({ resourceID, streamIndex }, name, type);
 }
 
-bool Bundle::ReplaceResource(const std::string &resourceName, const Resource &resource)
+bool Bundle::ReplaceResource(const std::string &resourceName, const Resource &resource, uint8_t streamIndex)
 {
-	return ReplaceResource(HashResourceName(resourceName), resource);
+	return ReplaceResource(HashResourceName(resourceName), resource, streamIndex);
 }
 
-bool Bundle::ReplaceResource(ResourceID resourceID, const Resource &resource)
+bool Bundle::ReplaceResource(ResourceID resourceID, const Resource &resource, uint8_t streamIndex)
 {
-	return m_impl->ReplaceResource(resourceID, resource);
+	return m_impl->ReplaceResource({ resourceID, streamIndex }, resource);
 }
 
 std::vector<ResourceID> Bundle::GetResourceIDs() const
@@ -199,6 +199,26 @@ std::vector<ResourceID> Bundle::GetResourceIDs() const
 std::map<uint32_t, std::vector<ResourceID>> Bundle::GetResourceIDsByType() const
 {
 	return m_impl->GetResourceIDsByType();
+}
+
+std::vector<uint8_t> Bundle::GetResourceStreamIndices(ResourceID resourceID) const
+{
+	return m_impl->GetResourceStreamIndices(resourceID);
+}
+
+ResourceID Bundle::GetDefaultResourceID() const
+{
+	return m_impl->GetDefaultResourceID();
+}
+
+int32_t Bundle::GetDefaultResourceStreamIndex() const
+{
+	return m_impl->GetDefaultResourceStreamIndex();
+}
+
+std::string Bundle::GetStreamName(uint8_t index) const
+{
+	return m_impl->GetStreamName(index);
 }
 
 std::vector<MemoryType> Bundle::GetMemoryTypes() const

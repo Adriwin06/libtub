@@ -15,7 +15,7 @@ namespace libbndl
 
 			[[nodiscard]] virtual constexpr MagicNumber GetMagicNumber() const override { return MagicNumber::BNDL; }
 
-			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceID resourceID) const override;
+			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceKey resourceKey) const override;
 
 		private:
 			std::map<ResourceID, std::vector<ImportEntry>> m_imports;
