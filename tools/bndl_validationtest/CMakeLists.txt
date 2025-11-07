@@ -1,7 +1,14 @@
 add_executable(bndl_validationtest main.cpp)
 
-target_link_libraries(bndl_validationtest PRIVATE libbndl cxxopts::cxxopts pugixml::pugixml)
-target_compile_definitions(bndl_validationtest PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
+FetchContent_GetProperties(pugixml)
+
+target_link_libraries(bndl_validationtest PRIVATE libbndl cxxopts::cxxopts)
+if(TARGET pugixml::pugixml)
+    target_link_libraries(bndl_validationtest PRIVATE pugixml::pugixml)
+else()
+    target_include_directories(bndl_validationtest SYSTEM PRIVATE ${pugixml_SOURCE_DIR}/src)
+    target_compile_definitions(bndl_validationtest PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
+endif()
 
 set_property(TARGET bndl_validationtest PROPERTY CXX_STANDARD 20)
 

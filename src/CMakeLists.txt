@@ -19,6 +19,7 @@ FetchContent_Declare(
     binaryio
     GIT_REPOSITORY https://github.com/Bo98/libbinaryio
     GIT_TAG        2a95966233e818cf5c0990d6bf338da4afc81c7e
+    SYSTEM
     EXCLUDE_FROM_ALL
     FIND_PACKAGE_ARGS
 )
@@ -26,6 +27,7 @@ FetchContent_Declare(
     ZLIB
     GIT_REPOSITORY https://github.com/madler/zlib
     GIT_TAG        5a82f71ed1dfc0bec044d9702463dbdf84ea3b71
+    SYSTEM
     EXCLUDE_FROM_ALL
     FIND_PACKAGE_ARGS
 )
@@ -33,6 +35,7 @@ FetchContent_Declare(
     pugixml
     GIT_REPOSITORY https://github.com/zeux/pugixml
     GIT_TAG        ee86beb30e4973f5feffe3ce63bfa4fbadf72f38 # v1.15
+    SOURCE_SUBDIR  dontbuild
     EXCLUDE_FROM_ALL
     FIND_PACKAGE_ARGS 1.11
 )
@@ -45,10 +48,10 @@ if(NOT ZLIB_FOUND AND NOT BUILD_SHARED_LIBS)
 endif()
 
 target_link_libraries(libbndl PRIVATE binaryio ZLIB::ZLIB)
-if(pugixml_FOUND)
+if(TARGET pugixml::pugixml)
     target_link_libraries(libbndl PRIVATE pugixml::pugixml)
 else()
-    target_include_directories(libbndl PRIVATE ${pugixml_SOURCE_DIR}/src)
+    target_include_directories(libbndl SYSTEM PRIVATE ${pugixml_SOURCE_DIR}/src)
     target_compile_definitions(libbndl PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
 endif()
 

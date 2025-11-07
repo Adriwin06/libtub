@@ -8,9 +8,15 @@ FetchContent_Declare(
     FIND_PACKAGE_ARGS
 )
 FetchContent_MakeAvailable(cxxopts)
+FetchContent_GetProperties(pugixml)
 
-target_link_libraries(bndl_util PRIVATE libbndl cxxopts::cxxopts pugixml::pugixml)
-target_compile_definitions(bndl_util PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
+target_link_libraries(bndl_util PRIVATE libbndl cxxopts::cxxopts)
+if(TARGET pugixml::pugixml)
+    target_link_libraries(bndl_util PRIVATE pugixml::pugixml)
+else()
+    target_include_directories(bndl_util SYSTEM PRIVATE ${pugixml_SOURCE_DIR}/src)
+    target_compile_definitions(bndl_util PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
+endif()
 
 set_property(TARGET bndl_util PROPERTY CXX_STANDARD 20)
 
