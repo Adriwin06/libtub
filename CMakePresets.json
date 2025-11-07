@@ -20,7 +20,8 @@
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
         "LIBBNDL_BUILD_TOOLS": "ON",
-        "LIBBNDL_INSTALL_TOOLS": "ON"
+        "LIBBNDL_INSTALL_TOOLS": "ON",
+        "LIBBNDL_BUILD_VALIDATIONTEST": "ON"
       }
     },
     {
@@ -414,7 +415,7 @@
   ],
   "vendor": {
     "qt-project.org/Presets": {
-      "checksum": "YMZgAov16/vL9KShMbHsAB8IkfY="
+      "checksum": "Vvury/6B6y8sAEcGfFRgwMMpPdE="
     }
   }
 }
