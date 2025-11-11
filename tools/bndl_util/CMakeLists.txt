@@ -18,17 +18,12 @@ else()
     target_compile_definitions(bndl_util PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
 endif()
 
-set_property(TARGET bndl_util PROPERTY CXX_STANDARD 20)
+target_compile_features(bndl_util PRIVATE cxx_std_20)
 
 if(MSVC)
     target_compile_options(bndl_util PRIVATE "/W4" "/Zc:throwingNew" "/EHsc")
 endif()
 
-add_custom_command(TARGET bndl_util POST_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:libbndl> $<TARGET_FILE_DIR:bndl_util>)
-
 if(LIBBNDL_INSTALL_TOOLS)
-    install(TARGETS bndl_util RUNTIME DESTINATION bin
-                              LIBRARY DESTINATION lib
-                              ARCHIVE DESTINATION lib)
+    install(TARGETS bndl_util)
 endif()

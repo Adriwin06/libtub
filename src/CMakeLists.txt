@@ -4,16 +4,21 @@ include(GenerateExportHeader)
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
 set(HEADER_DIR ${LIBBNDL_ROOT}/include/libbndl)
-set(PUBLIC_HEADERS ${HEADER_DIR}/bundle.hpp)
-
-file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
-    "*.c"
-    "*.h"
-    "*.hpp"
-    "*.cpp"
+file(GLOB_RECURSE PUBLIC_HEADERS CONFIGURE_DEPENDS
+    "${HEADER_DIR}/*.hpp"
+    "${HEADER_DIR}/*.h"
+    "${HEADER_DIR}/*.inc"
 )
 
-add_library(libbndl ${SRC_FILES} ${PUBLIC_HEADERS})
+file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS "*.cpp")
+
+add_library(libbndl ${SRC_FILES})
+
+target_sources(libbndl PUBLIC FILE_SET HEADERS
+                              BASE_DIRS "${HEADER_DIR}"
+                              FILES "${PUBLIC_HEADERS}")
+set_source_files_properties(${HEADER_DIR}/bundle.h PROPERTIES LANGUAGE C
+                                                              HEADER_FILE_ONLY ON)
 
 FetchContent_Declare(
     binaryio
@@ -55,33 +60,29 @@ else()
     target_compile_definitions(libbndl PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
 endif()
 
-set_property(TARGET libbndl PROPERTY CXX_STANDARD 20)
-set_property(TARGET libbndl PROPERTY PREFIX "")
-set_property(TARGET libbndl PROPERTY CXX_VISIBILITY_PRESET hidden)
+target_compile_features(libbndl PUBLIC c_std_11 cxx_std_20)
 
-if(NOT BUILD_SHARED_LIBS)
-    set_property(TARGET libbndl PROPERTY COMPILE_FLAGS -DLIBBNDL_STATIC_DEFINE)
-endif()
-generate_export_header(libbndl)
+set_target_properties(libbndl PROPERTIES PREFIX ""
+                                         CXX_VISIBILITY_PRESET hidden
+                                         POSITION_INDEPENDENT_CODE ON
+                                         VERIFY_INTERFACE_HEADER_SETS ${PROJECT_IS_TOP_LEVEL})
 
-target_include_directories(libbndl PUBLIC ${LIBBNDL_ROOT}/include ${CMAKE_CURRENT_BINARY_DIR})
+generate_export_header(libbndl EXPORT_FILE_NAME include/libbndl/internal/export.h)
+
+target_include_directories(libbndl PUBLIC ${LIBBNDL_ROOT}/include ${CMAKE_CURRENT_BINARY_DIR}/include)
 
 if(MSVC)
     target_compile_options(libbndl PRIVATE "/W4" "/Zc:throwingNew" "/EHsc")
 endif()
 
-set_property(TARGET libbndl PROPERTY POSITION_INDEPENDENT_CODE ON)
-
-install(TARGETS libbndl RUNTIME DESTINATION bin
-                        LIBRARY DESTINATION lib
-                        ARCHIVE DESTINATION lib)
+install(TARGETS libbndl FILE_SET HEADERS)
 if(CMAKE_CXX_LINKER_SUPPORTS_PDB AND BUILD_SHARED_LIBS)
-    install(FILES $<TARGET_PDB_FILE:libbndl> DESTINATION bin OPTIONAL)
+    install(FILES $<TARGET_PDB_FILE:libbndl> TYPE BIN OPTIONAL)
 endif()
-install(FILES ${PUBLIC_HEADERS} ${CMAKE_CURRENT_BINARY_DIR}/libbndl_export.h DESTINATION include/libbndl)
-install(FILES ${LIBBNDL_ROOT}/LICENSE.md DESTINATION share/libbndl RENAME copyright)
 
-if(NOT ZLIB_FOUND AND BUILD_SHARED_LIBS)
-    install(TARGETS zlib RUNTIME DESTINATION bin
-                               LIBRARY DESTINATION lib)
+include(GNUInstallDirs) # `TYPE DOC` behaviour changes(!) when GNUInstallDirs is included
+install(FILES ${LIBBNDL_ROOT}/LICENSE.md TYPE DOC RENAME copyright)
+
+if(NOT ZLIB_FOUND AND ZLIB_BUILD_SHARED)
+    install(TARGETS zlib ARCHIVE EXCLUDE_FROM_ALL)
 endif()

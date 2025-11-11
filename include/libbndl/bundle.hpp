@@ -1,5 +1,5 @@
 #pragma once
-#include "libbndl_export.h"
+#include <libbndl/internal/export.h>
 #include <array>
 #include <map>
 #include <memory>
@@ -33,17 +33,16 @@ namespace libbndl
 
 	enum class Magic : uint8_t
 	{
-		Bndl = 1,
-		Bnd2 = 2
+#define LIBBNDL_ENUM_MAGIC(name, _, value) name = value,
+#include <libbndl/internal/enum.inc>
+#undef LIBBNDL_ENUM_MAGIC
 	};
 
 	enum class Platform : uint16_t
 	{
-		PC = 1, // (or PS4/XB1)
-		Xbox360 = 2,
-		PS3 = 3,
-		PSVita = 4,
-		WiiU = 5
+#define LIBBNDL_ENUM_PLATFORM(name, _, value) name = value,
+#include <libbndl/internal/enum.inc>
+#undef LIBBNDL_ENUM_PLATFORM
 	};
 
 	namespace ResourceType
@@ -52,140 +51,9 @@ namespace libbndl
 		{
 			enum : uint32_t
 			{
-				Texture = 0x00,
-				Material = 0x01,
-				RenderableMesh = 0x02, // found in Black
-				TextFile = 0x03,
-				DrawIndexParams = 0x04, // found in Black
-				IndexBuffer = 0x05, // found in Black
-				MeshState = 0x06, // found in Black
-				TextureAuxInfo = 0x07, // no known builds
-				VertexBufferItem = 0x08, // no known builds
-				VertexBuffer = 0x09, // found in Black
-				VertexDescriptor = 0x0A,
-				MaterialCRC32 = 0x0B, // 2006
-				Renderable = 0x0C,
-				MaterialTechnique = 0x0D, // last-gen console
-				TextureState = 0x0E,
-				MaterialState = 0x0F,
-				DepthStencilState = 0x10, // found in Black
-				RasterizerState = 0x11, // found in Black
-				ShaderProgramBuffer = 0x12,
-				RenderTargetState = 0x13, // no known builds
-				ShaderParameter = 0x14,
-				RenderableAssembly = 0x15, // found in Black
-				Debug = 0x16,
-				KdTree = 0x17,
-				VoiceHierarchy = 0x18, // removed
-				Snr = 0x19,
-				InterpreterData = 0x1A, // unregistered
-				AttribSysSchema = 0x1B,
-				AttribSysVault = 0x1C,
-				EntryList = 0x1D, // unregistered
-				AptDataHeader = 0x1E,
-				GuiPopup = 0x1F,
-
-				Font = 0x21,
-				LuaCode = 0x22,
-				InstanceList = 0x23,
-				CollisionMeshData = 0x24, // formerly ClusteredMesh
-				IdList = 0x25,
-				InstanceCollisionList = 0x26, // removed
-				Language = 0x27,
-				SatNavTile = 0x28,
-				SatNavTileDirectory = 0x29,
-				Model = 0x2A,
-				ColourCube = 0x2B,
-				HudMessage = 0x2C,
-				HudMessageList = 0x2D,
-				HudMessageSequence = 0x2E,
-				HudMessageSequenceDictionary = 0x2F,
-				WorldPainter2D = 0x30,
-				PFXHookBundle = 0x31,
-				Shader = 0x32, // PC
-				ShaderTechnique = 0x32, // Console
-
-				RawFile = 0x40, // found in Black
-				ICETakeDictionary = 0x41,
-				VideoData = 0x42,
-				PolygonSoupList = 0x43,
-				DeveloperList = 0x44,
-				CommsToolListDefinition = 0x45,
-				CommsToolList = 0x46,
-
-				BinaryFile = 0x50, // Used as a base class for other types, but this type ID was found in one of the builds.
-				AnimationCollection = 0x51,
-
-				// These have unusual categorisation, almost as if the 0x was omitted and these should be in the game-specific section.
-				// All are from Black.
-				CharAnimBankFile = 0x2710, // 10000
-				WeaponFile = 0x2711, // 10001
-				VFXFile = 0x343E, // 13374? - registered as "FileResourceType"
-				BearFile = 0x343F, // 13375? - also registered as "FileResourceType"
-				BkPropInstanceList = 0x3A98, // 15000
-
-				Registry = 0xA000,
-				GenericRwacFactoryConfiguration = 0xA010, // no known builds
-				GenericRwacWaveContent = 0xA020,
-				GinsuWaveContent = 0xA021,
-				AemsBank = 0xA022,
-				Csis = 0xA023,
-				Nicotine = 0xA024,
-				Splicer = 0xA025,
-				FreqContent = 0xA026, // unregistered
-				VoiceHierarchyCollection = 0xA027, // unregistered
-				GenericRwacReverbIRContent = 0xA028,
-				SnapshotData = 0xA029,
-
-				ZoneList = 0xB000,
-
-				VFX = 0xC001, // no known builds
-
-				// Burnout Paradise
-				LoopModel = 0x10000,
-				AISections = 0x10001,
-				TrafficData = 0x10002,
-				Trigger = 0x10003,
-				DeformationModel = 0x10004,
-				VehicleList = 0x10005,
-				GraphicsSpec = 0x10006,
-				PhysicsSpec = 0x10007, // unregistered
-				ParticleDescriptionCollection = 0x10008,
-				WheelList = 0x10009,
-				WheelGraphicsSpec = 0x1000A,
-				TextureNameMap = 0x1000B,
-				ICEList = 0x1000C,
-				ICEData = 0x1000D, // ICE
-				Progression = 0x1000E,
-				PropPhysics = 0x1000F,
-				PropGraphicsList = 0x10010,
-				PropInstanceData = 0x10011,
-				BrnEnvironmentKeyframe = 0x10012,
-				BrnEnvironmentTimeLine = 0x10013,
-				BrnEnvironmentDictionary = 0x10014,
-				GraphicsStub = 0x10015,
-				StaticSoundMap = 0x10016,
-				StreetData = 0x10018,
-				BrnVFXMeshCollection = 0x10019,
-				MassiveLookupTable = 0x1001A,
-				VFXPropCollection = 0x1001B,
-				StreamedDeformationSpec = 0x1001C,
-				ParticleDescription = 0x1001D,
-				PlayerCarColours = 0x1001E,
-				ChallengeList = 0x1001F,
-				FlaptFile = 0x10020,
-				ProfileUpgrade = 0x10021,
-				VehicleAnimation = 0x10023,
-				BodypartRemapping = 0x10024,
-				LUAList = 0x10025,
-				LUAScript = 0x10026,
-
-				// Black
-				BkSoundWeapon = 0x11000,
-				BkSoundGunsu = 0x11001,
-				BkSoundBulletImpact = 0x11002,
-				BkSoundBulletImpactList = 0x11003,
-				BkSoundBulletImpactStream = 0x11004
+#define LIBBNDL_ENUM_RESOURCE_TYPE_BURNOUT(name, _, value) name = value,
+#include <libbndl/internal/enum.inc>
+#undef LIBBNDL_ENUM_RESOURCE_TYPE_BURNOUT
 			};
 		}
 
@@ -193,135 +61,18 @@ namespace libbndl
 		{
 			enum : uint32_t
 			{
-				Texture = 0x01,
-				Material = 0x02,
-				VertexDescriptor = 0x03,
-				VertexProgramState = 0x04,
-				Renderable = 0x05,
-				MaterialState = 0x06,
-				SamplerState = 0x07,
-				ShaderProgramBuffer = 0x08,
-
-				AttribSysSchema = 0x10,
-				AttribSysVault = 0x11,
-				GeneSysDefinition = 0x12,
-				GeneSysInstance = 0x13,
-				GeneSysType = 0x14,
-				GeneSysObject = 0x15,
-				BinaryFile = 0x16,
-				MiiData = 0x17,
-
-				EntryList = 0x20,
-				BundleIndex = 0x21,
-
-				Font = 0x30,
-
-				LuaCode = 0x40,
-
-				InstanceList = 0x50,
-				Model = 0x51,
-				ColourCube = 0x52,
-				Shader = 0x53,
-
-				PolygonSoupList = 0x60,
-				PolygonSoupTree = 0x61,
-				IdList = 0x62,
-
-				NavigationMesh = 0x68,
-
-				TextFile = 0x70,
-				TextFileList = 0x71,
-				ResourceHandleList = 0x72,
-
-				LuaData = 0x74,
-
-				AllocatorInPool = 0x78,
-
-				Ginsu = 0x80,
-				Wave = 0x81,
-				WaveContainerTable = 0x82,
-				GameplayLinkData = 0x83,
-				WaveDictionary = 0x84,
-				MicroMonoStream = 0x85,
-				Reverb = 0x86,
-
-				ZoneList = 0x90,
-				WorldPaintMap = 0x91,
-
-				IceAnimDictionary = 0xA0,
-
-				AnimationList = 0xB0,
-				PathAnimation = 0xB1,
-				AnimSkel = 0xB2,
-				Animation = 0xB3,
-
-				CgsVertexProgramState = 0xC0,
-				CgsProgramBuffer = 0xC1,
-
-				DeltaDeleted = 0xDE,
-
-				VehicleList = 0x105,
-				VehicleGraphicsSpec = 0x106,
-				VehiclePhysicsSpec = 0x107,
-				WheelList = 0x109,
-				WheelGraphicsSpec = 0x10A,
-				EnvironmentKeyframe = 0x112,
-				EnvironmentTimeLine = 0x113,
-				EnvironmentDictionary = 0x114,
-				GraphicsStub = 0x115,
-				FlaptFile = 0x116,
-
-				AIData = 0x200,
-				Language = 0x201,
-				TriggerData = 0x202,
-				RoadData = 0x203,
-				DynamicInstanceList = 0x204,
-				WorldObject = 0x205,
-				ZoneHeader = 0x206,
-				VehicleSound = 0x207,
-				RoadMapData = 0x208,
-				CharacterSpec = 0x209,
-				CharacterList = 0x20A,
-				SurfaceSounds = 0x20B,
-				ReverbRoadData = 0x20C,
-				CameraTake = 0x20D,
-				CameraTakeList = 0x20E,
-				GroundcoverCollection = 0x20F,
-				ControlMesh = 0x210,
-				CutsceneData = 0x211,
-				CutsceneList = 0x212,
-				LightInstanceList = 0x213,
-				GroundcoverInstances = 0x214,
-				CompoundObject = 0x215,
-				CompoundInstanceList = 0x216,
-				PropObject = 0x217,
-				PropInstanceList = 0x218,
-				ZoneAmbienceList = 0x219,
-
-				BearEffect = 0x301,
-				BearGlobalParameters = 0x302,
-				ConvexHull = 0x303,
-
-				HSMData = 0x501,
-
-				TrafficGraphicsStub = 0x700,
-				TrafficLaneData = 0x701
+#define LIBBNDL_ENUM_RESOURCE_TYPE_NFS(name, _, value) name = value,
+#include <libbndl/internal/enum.inc>
+#undef LIBBNDL_ENUM_RESOURCE_TYPE_NFS
 			};
 		}
 	}
 
 	enum class MemoryType : uint8_t
 	{
-		MainMemory = 0,
-
-		GraphicsSystem = 1, // PS3
-		Physical = 1, // Xbox 360
-		Mem1 = 1, // Wii U
-
-		GraphicsLocal = 2, // PS3
-		GraphicsMem2 = 2, // Wii U
-
-		Disposable = 3 // PC in Burnout, all in NFS
+#define LIBBNDL_ENUM_MEMORY_TYPE(name, _, value) name = value,
+#include <libbndl/internal/enum.inc>
+#undef LIBBNDL_ENUM_MEMORY_TYPE
 	};
 
 	class Flags
@@ -330,14 +81,9 @@ namespace libbndl
 		using UnderlyingType = uint32_t;
 		enum class Values : UnderlyingType
 		{
-			Compressed = 0x1,
-			MainMemOptimised = 0x2,
-			GraphicsMemOptimised = 0x4,
-			HasDebugData = 0x8,
-			NonAsynchFixupRequired = 0x10,
-			MultistreamBundle = 0x20,
-			DeltaBundle = 0x40,
-			ContainsDefaultResource = 0x80
+#define LIBBNDL_ENUM_FLAGS(name, _, value) name = value,
+#include <libbndl/internal/enum.inc>
+#undef LIBBNDL_ENUM_FLAGS
 		};
 
 	public:
@@ -442,8 +188,9 @@ namespace libbndl
 	public:
 		enum class ImportType : uint8_t
 		{
-			Pointer = 0,
-			ResourceHandle = 1
+#define LIBBNDL_ENUM_IMPORT_TYPE(name, _, value) name = value,
+#include <libbndl/internal/enum.inc>
+#undef LIBBNDL_ENUM_IMPORT_TYPE
 		};
 
 		constexpr Import(ResourceID resourceID, uint32_t offset, ImportType type = ImportType::Pointer) noexcept
