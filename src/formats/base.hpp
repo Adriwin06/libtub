@@ -56,7 +56,7 @@ namespace libbndl
 			uint16_t importCount;
 		};
 
-		struct ResourceDebugInfoEntry
+		struct ResourceDebugDataEntry
 		{
 			std::string name;
 			std::string typeName;
@@ -78,21 +78,22 @@ namespace libbndl
 			virtual bool Load(binaryio::BinaryReader &reader) = 0;
 			virtual bool Save(binaryio::BinaryWriter &reader) = 0;
 
-			[[nodiscard]] virtual constexpr MagicNumber GetMagicNumber() const = 0;
+			[[nodiscard]] virtual constexpr Magic GetMagic() const = 0;
 			[[nodiscard]] constexpr uint16_t GetVersion() const { return m_version; }
 			[[nodiscard]] constexpr Platform GetPlatform() const { return m_platform; }
 			[[nodiscard]] constexpr Flags GetFlags() const { return m_flags; }
 
-			[[nodiscard]] std::optional<ResourceDebugInfoEntry> GetResourceDebugInfo(ResourceKey resourceKey) const;
+			[[nodiscard]] std::optional<ResourceDebugDataEntry> GetResourceDebugData(ResourceKey resourceKey) const;
 			[[nodiscard]] std::optional<uint32_t> GetResourceType(ResourceKey resourceKey) const;
 			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceKey resourceKey) const = 0;
 			[[nodiscard]] Buffer GetBinary(ResourceKey resourceKey, MemoryType memoryType) const;
 
-			bool AddResource(ResourceKey resourceKey, const Resource &data, uint32_t resourceType);
-			bool AddResourceDebugInfo(ResourceKey resourceID, const std::string &name, const std::string &type);
+			bool AddResource(ResourceKey resourceKey, const Resource &data);
+			bool AddResourceDebugData(ResourceKey resourceID, const std::string &name, const std::string &type);
 
 			bool ReplaceResource(ResourceKey resourceKey, const Resource &data);
 
+			[[nodiscard]] uint32_t GetResourceCount() const { return static_cast<uint32_t>(m_entries.size()); }
 			[[nodiscard]] std::vector<ResourceID> GetResourceIDs() const;
 			[[nodiscard]] std::map<uint32_t, std::vector<ResourceID>> GetResourceIDsByType() const;
 			[[nodiscard]] std::vector<uint8_t> GetResourceStreamIndices(ResourceID resourceID) const;
@@ -107,7 +108,7 @@ namespace libbndl
 			static constexpr const uint8_t kStreamLimit = 4;
 
 			std::map<ResourceKey, ResourceEntry> m_entries;
-			std::map<ResourceKey, ResourceDebugInfoEntry> m_debugInfoEntries;
+			std::map<ResourceKey, ResourceDebugDataEntry> m_debugDataEntries;
 
 			uint16_t m_version;
 			Platform m_platform;
@@ -121,7 +122,7 @@ namespace libbndl
 			void ParseDebugData(const std::string &rstXML);
 			[[nodiscard]] std::string GenerateDebugData() const;
 			virtual std::vector<ResourceKey> SortedDebugDataKeys() const;
-			virtual std::vector<std::pair<std::string, std::string>> GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugInfoEntry &debugInfo) const;
+			virtual std::vector<std::pair<std::string, std::string>> GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugDataEntry &debugData) const;
 
 			[[nodiscard]] static ImportEntry ReadImport(binaryio::BinaryReader &reader);
 			static void WriteImport(binaryio::BinaryWriter &writer, const Import &import);

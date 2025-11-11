@@ -10,17 +10,25 @@
 
 using namespace libbndl;
 
+ResourceID::ResourceID(const std::string &name) noexcept
+{
+	std::string transformedName = name;
+	std::transform(transformedName.begin(), transformedName.end(), transformedName.begin(), [](auto c) { return std::tolower(c, std::locale::classic()); });
+	m_id = crc32_z(0, reinterpret_cast<const Bytef *>(transformedName.c_str()), transformedName.length());
+}
+
+
 Bundle::Bundle() = default;
 
-Bundle::Bundle(MagicNumber magicNumber, uint16_t version, Platform platform, Flags flags)
+Bundle::Bundle(Magic magic, uint16_t version, Platform platform, Flags flags)
 {
-	switch (magicNumber)
+	switch (magic)
 	{
-	case MagicNumber::BNDL:
-		m_impl = std::make_unique<Formats::BNDL>(version, platform, flags);
+	case Magic::Bndl:
+		m_impl = std::make_unique<Formats::Bndl>(version, platform, flags);
 		break;
-	case MagicNumber::BND2:
-		m_impl = std::make_unique<Formats::BND2>(version, platform, flags);
+	case Magic::Bnd2:
+		m_impl = std::make_unique<Formats::Bnd2>(version, platform, flags);
 		break;
 	default:
 		throw new std::invalid_argument("Invalid magic number");
@@ -56,9 +64,9 @@ bool Bundle::Load(const std::string &name)
 	// Check if it's a BNDL archive
 	auto magic = reader.ReadString(4);
 	if (magic == std::string("bndl"))
-		m_impl = std::make_unique<Formats::BNDL>();
+		m_impl = std::make_unique<Formats::Bndl>();
 	else if (magic == std::string("bnd2"))
-		m_impl = std::make_unique<Formats::BND2>();
+		m_impl = std::make_unique<Formats::Bnd2>();
 	else
 		return false;
 
@@ -81,9 +89,9 @@ bool Bundle::Save(const std::string &name)
 	return true;
 }
 
-MagicNumber Bundle::GetMagicNumber() const
+Magic Bundle::GetMagic() const
 {
-	return m_impl->GetMagicNumber();
+	return m_impl->GetMagic();
 }
 
 uint16_t Bundle::GetVersion() const
@@ -103,23 +111,12 @@ Flags Bundle::GetFlags() const
 
 bool Bundle::IsBurnoutEra() const
 {
-	return GetMagicNumber() == MagicNumber::BNDL || GetVersion() <= 2;
+	return GetMagic() == Magic::Bndl || GetVersion() <= 2;
 }
 
 bool Bundle::IsNeedForSpeedEra() const
 {
-	return GetMagicNumber() == MagicNumber::BND2 && GetVersion() >= 3;
-}
-
-ResourceID Bundle::HashResourceName(std::string resourceName) const
-{
-	std::transform(resourceName.begin(), resourceName.end(), resourceName.begin(), [](auto c) { return std::tolower(c, std::locale::classic()); });
-	return ResourceID(crc32_z(0, reinterpret_cast<const Bytef *>(resourceName.c_str()), resourceName.length()));
-}
-
-std::optional<Resource> Bundle::GetResource(const std::string &resourceName, uint8_t streamIndex) const
-{
-	return GetResource(HashResourceName(resourceName), streamIndex);
+	return GetMagic() == Magic::Bnd2 && GetVersion() >= 3;
 }
 
 std::optional<Resource> Bundle::GetResource(ResourceID resourceID, uint8_t streamIndex) const
@@ -127,33 +124,18 @@ std::optional<Resource> Bundle::GetResource(ResourceID resourceID, uint8_t strea
 	return m_impl->GetResource({ resourceID, streamIndex });
 }
 
-Buffer Bundle::GetBinary(const std::string &resourceName, MemoryType memoryType, uint8_t streamIndex) const
-{
-	return GetBinary(HashResourceName(resourceName), memoryType, streamIndex);
-}
-
 Buffer Bundle::GetBinary(ResourceID resourceID, MemoryType memoryType, uint8_t streamIndex) const
 {
 	return m_impl->GetBinary({ resourceID, streamIndex }, memoryType);
 }
 
-std::optional<ResourceDebugInfo> Bundle::GetResourceDebugInfo(const std::string &resourceName, uint8_t streamIndex) const
+std::optional<ResourceDebugData> Bundle::GetResourceDebugData(ResourceID resourceID, uint8_t streamIndex) const
 {
-	return GetResourceDebugInfo(HashResourceName(resourceName), streamIndex);
-}
-
-std::optional<ResourceDebugInfo> Bundle::GetResourceDebugInfo(ResourceID resourceID, uint8_t streamIndex) const
-{
-	const auto &internalDebugInfo = m_impl->GetResourceDebugInfo({ resourceID, streamIndex });
-	if (!internalDebugInfo)
+	const auto &internalDebugData = m_impl->GetResourceDebugData({ resourceID, streamIndex });
+	if (!internalDebugData)
 		return {};
 
-	return ResourceDebugInfo{ internalDebugInfo->name, internalDebugInfo->typeName };
-}
-
-std::optional<uint32_t> Bundle::GetResourceType(const std::string &resourceName, uint8_t streamIndex) const
-{
-	return GetResourceType(HashResourceName(resourceName), streamIndex);
+	return ResourceDebugData{ internalDebugData->name, internalDebugData->typeName };
 }
 
 std::optional<uint32_t> Bundle::GetResourceType(ResourceID resourceID, uint8_t streamIndex) const
@@ -161,34 +143,24 @@ std::optional<uint32_t> Bundle::GetResourceType(ResourceID resourceID, uint8_t s
 	return m_impl->GetResourceType({ resourceID, streamIndex });
 }
 
-bool Bundle::AddResource(const std::string &resourceName, const Resource &resource, uint32_t resourceType, uint8_t streamIndex)
+bool Bundle::AddResource(ResourceID resourceID, const Resource &resource, uint8_t streamIndex)
 {
-	return AddResource(HashResourceName(resourceName), resource, resourceType, streamIndex);
+	return m_impl->AddResource({ resourceID, streamIndex }, resource);
 }
 
-bool Bundle::AddResource(ResourceID resourceID, const Resource &resource, uint32_t resourceType, uint8_t streamIndex)
+bool Bundle::AddResourceDebugData(ResourceID resourceID, const ResourceDebugData &debugData, uint8_t streamIndex)
 {
-	return m_impl->AddResource({ resourceID, streamIndex }, resource, resourceType);
-}
-
-bool Bundle::AddResourceDebugInfo(const std::string &resourceName, const std::string &name, const std::string &type, uint8_t streamIndex)
-{
-	return AddResourceDebugInfo(HashResourceName(resourceName), name, type, streamIndex);
-}
-
-bool Bundle::AddResourceDebugInfo(ResourceID resourceID, const std::string &name, const std::string &type, uint8_t streamIndex)
-{
-	return m_impl->AddResourceDebugInfo({ resourceID, streamIndex }, name, type);
-}
-
-bool Bundle::ReplaceResource(const std::string &resourceName, const Resource &resource, uint8_t streamIndex)
-{
-	return ReplaceResource(HashResourceName(resourceName), resource, streamIndex);
+	return m_impl->AddResourceDebugData({ resourceID, streamIndex }, debugData.GetName(), debugData.GetTypeName());
 }
 
 bool Bundle::ReplaceResource(ResourceID resourceID, const Resource &resource, uint8_t streamIndex)
 {
 	return m_impl->ReplaceResource({ resourceID, streamIndex }, resource);
+}
+
+uint32_t Bundle::GetResourceCount() const
+{
+	return m_impl->GetResourceCount();
 }
 
 std::vector<ResourceID> Bundle::GetResourceIDs() const

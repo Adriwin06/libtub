@@ -98,8 +98,8 @@ void Editor::PopulateTree()
 	QStandardItem *item = m_model->invisibleRootItem();
 	for (const auto &resourceID : m_archive.GetResourceIDs())
 	{
-		const auto info = m_archive.GetResourceDebugInfo(resourceID);
-		const auto &name = info ? QString::fromStdString(info->GetName()) : QString::number(static_cast<uint64_t>(resourceID), 16);
+		const auto debugData = m_archive.GetResourceDebugData(resourceID);
+		const auto &name = debugData ? QString::fromStdString(debugData->GetName()) : QString::number(static_cast<uint64_t>(resourceID), 16);
 		QStandardItem *child = new QStandardItem(name);
 		child->setData(QVariant(name));
 		item->appendRow(child);

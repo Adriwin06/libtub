@@ -17,10 +17,10 @@ Base::Base(uint16_t version, Platform platform, Flags flags)
 	m_flags = flags;
 }
 
-std::optional<ResourceDebugInfoEntry> Base::GetResourceDebugInfo(ResourceKey resourceKey) const
+std::optional<ResourceDebugDataEntry> Base::GetResourceDebugData(ResourceKey resourceKey) const
 {
-	const auto it = m_debugInfoEntries.find(resourceKey);
-	if (it == m_debugInfoEntries.end())
+	const auto it = m_debugDataEntries.find(resourceKey);
+	if (it == m_debugDataEntries.end())
 		return {};
 
 	return it->second;
@@ -71,14 +71,14 @@ Buffer Base::GetBinary(ResourceKey resourceKey, MemoryType memoryType) const
 	return { std::move(uncompressedBuffer), uncompressedSize, dataInfo.uncompressedAlignment };
 }
 
-bool Base::AddResource(ResourceKey resourceKey, const Resource &resource, uint32_t resourceType)
+bool Base::AddResource(ResourceKey resourceKey, const Resource &resource)
 {
 	const auto it = m_entries.find(resourceKey);
-	if (it != m_entries.end() || resource.GetImports().size() > std::numeric_limits<uint16_t>::max())
+	if (it != m_entries.end() || m_entries.size() >= std::numeric_limits<uint32_t>::max() || resource.GetImports().size() > std::numeric_limits<uint16_t>::max())
 		return false;
 
 	auto &e = it->second;
-	e.resourceType = resourceType;
+	e.resourceType = resource.GetResourceType();
 
 	if (!(m_flags & Flags::Compressed))
 	{
@@ -94,15 +94,15 @@ bool Base::AddResource(ResourceKey resourceKey, const Resource &resource, uint32
 	return ReplaceResource(resourceKey, resource);
 }
 
-bool Base::AddResourceDebugInfo(ResourceKey resourceKey, const std::string &name, const std::string &type)
+bool Base::AddResourceDebugData(ResourceKey resourceKey, const std::string &name, const std::string &type)
 {
-	const auto it = m_debugInfoEntries.find(resourceKey);
-	if (it != m_debugInfoEntries.end())
+	const auto it = m_debugDataEntries.find(resourceKey);
+	if (it != m_debugDataEntries.end())
 		return false;
 
-	auto &debugInfo = it->second;
-	debugInfo.name = name;
-	debugInfo.typeName = type;
+	auto &debugData = it->second;
+	debugData.name = name;
+	debugData.typeName = type;
 
 	return true;
 }
@@ -328,9 +328,9 @@ void Base::ParseDebugData(const std::string &rstXML)
 					streamIndex = streamIndices.front();
 			}
 
-			auto &debugInfo = m_debugInfoEntries[{ resourceID, streamIndex }];
-			debugInfo.name = resource.attribute("name").value();
-			debugInfo.typeName = resource.attribute("type").value();
+			auto &debugData = m_debugDataEntries[{ resourceID, streamIndex }];
+			debugData.name = resource.attribute("name").value();
+			debugData.typeName = resource.attribute("type").value();
 		}
 	}
 }
@@ -342,7 +342,7 @@ std::string Base::GenerateDebugData() const
 
 	for (const auto &key : SortedDebugDataKeys())
 	{
-		const auto &entry = m_debugInfoEntries.at(key);
+		const auto &entry = m_debugDataEntries.at(key);
 
 		auto entryChild = root.append_child("Resource");
 		for (const auto &attr : GetDebugDataAttributes(key, entry))
@@ -358,16 +358,16 @@ std::string Base::GenerateDebugData() const
 
 std::vector<ResourceKey> Base::SortedDebugDataKeys() const
 {
-	const auto keys = std::views::keys(m_debugInfoEntries);
+	const auto keys = std::views::keys(m_debugDataEntries);
 	return std::vector<ResourceKey>{ keys.begin(), keys.end() };
 }
 
-std::vector<std::pair<std::string, std::string>> Base::GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugInfoEntry &debugInfo) const
+std::vector<std::pair<std::string, std::string>> Base::GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugDataEntry &debugData) const
 {
 	return std::vector<std::pair<std::string, std::string>> {
-		{ "id", std::format("{:0{}x}", static_cast<uint64_t>(resourceKey.first), (resourceKey.first.GetIDType() != ResourceID::EIDType::Normal) ? 16 : 8) },
-		{ "type", debugInfo.typeName },
-		{ "name", debugInfo.name },
+		{ "id", std::format("{:0{}x}", static_cast<uint64_t>(resourceKey.first), (resourceKey.first.GetIDType() != ResourceID::IDType::Normal) ? 16 : 8) },
+		{ "type", debugData.typeName },
+		{ "name", debugData.name },
 	};
 }
 

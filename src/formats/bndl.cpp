@@ -4,7 +4,7 @@
 using namespace libbndl;
 using namespace libbndl::Formats;
 
-bool BNDL::Load(binaryio::BinaryReader &reader)
+bool Bndl::Load(binaryio::BinaryReader &reader)
 {
 	auto version = reader.Read<uint32_t>();
 	if ((version & 0xFFFF) == 0)
@@ -77,7 +77,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	}
 
 	m_entries.clear();
-	m_debugInfoEntries.clear();
+	m_debugDataEntries.clear();
 	m_imports.clear();
 
 	reader.Seek(idListOffset);
@@ -211,7 +211,7 @@ bool BNDL::Load(binaryio::BinaryReader &reader)
 	return true;
 };
 
-bool BNDL::Save(binaryio::BinaryWriter &writer)
+bool Bndl::Save(binaryio::BinaryWriter &writer)
 {
 	if (m_version < 3 || m_version > 5)
 		return false;
@@ -231,7 +231,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	writer.Write("bndl", 4);
 	writer.Write<uint32_t>(m_version);
 
-	const bool writeDebugData = !m_debugInfoEntries.empty() && !(m_flags & Flags::Compressed); // TODO: is the compressed check accurate?
+	const bool writeDebugData = !m_debugDataEntries.empty() && !(m_flags & Flags::Compressed); // TODO: is the compressed check accurate?
 	auto entryCount = static_cast<uint32_t>(m_entries.size());
 	if (writeDebugData)
 		entryCount++;
@@ -448,7 +448,7 @@ bool BNDL::Save(binaryio::BinaryWriter &writer)
 	return true;
 }
 
-std::optional<uint8_t> BNDL::MapFileBlockToLibBlock(uint8_t block) const
+std::optional<uint8_t> Bndl::MapFileBlockToLibBlock(uint8_t block) const
 {
 	std::optional<MemoryType> mappedType = {};
 	switch (block)
@@ -481,7 +481,7 @@ std::optional<uint8_t> BNDL::MapFileBlockToLibBlock(uint8_t block) const
 	return {};
 }
 
-std::optional<Resource> BNDL::GetResource(ResourceKey resourceKey) const
+std::optional<Resource> Bndl::GetResource(ResourceKey resourceKey) const
 {
 	const auto it = m_entries.find(resourceKey);
 	if (it == m_entries.end())
@@ -499,5 +499,5 @@ std::optional<Resource> BNDL::GetResource(ResourceKey resourceKey) const
 			imports.emplace_back(importEntry.resourceID, importEntry.offset);
 	}
 
-	return Resource{ std::move(buffers), std::move(imports) };
+	return Resource{ std::move(buffers), std::move(imports), it->second.resourceType };
 }

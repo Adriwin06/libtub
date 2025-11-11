@@ -8,7 +8,7 @@
 using namespace libbndl;
 using namespace libbndl::Formats;
 
-bool BND2::Load(binaryio::BinaryReader &reader)
+bool Bnd2::Load(binaryio::BinaryReader &reader)
 {
 	auto version = reader.Read<uint32_t>();
 	if ((version & 0xFF) == 0)
@@ -77,7 +77,7 @@ bool BND2::Load(binaryio::BinaryReader &reader)
 
 
 	m_entries.clear();
-	m_debugInfoEntries.clear();
+	m_debugDataEntries.clear();
 
 	reader.Seek(idBlockOffset);
 	for (auto i = 0U; i < numEntries; i++)
@@ -142,7 +142,7 @@ bool BND2::Load(binaryio::BinaryReader &reader)
 	return true;
 };
 
-bool BND2::Save(binaryio::BinaryWriter &writer)
+bool Bnd2::Save(binaryio::BinaryWriter &writer)
 {
 	if (m_version != 2 && m_version != 3 && m_version != 5)
 		return false;
@@ -235,17 +235,17 @@ bool BND2::Save(binaryio::BinaryWriter &writer)
 	if (m_version >= 3)
 	{
 		std::sort(sortedKeys.begin(), sortedKeys.end(), [this](const auto &a, const auto &b) {
-			const auto &debugInfoA = GetResourceDebugInfo(a);
-			const auto &debugInfoB = GetResourceDebugInfo(b);
+			const auto &debugDataA = GetResourceDebugData(a);
+			const auto &debugDataB = GetResourceDebugData(b);
 
-			const auto xmlA = (m_version == 3 && debugInfoA && debugInfoA->name.ends_with(".xml")) ? 1 : 0;
-			const auto xmlB = (m_version == 3 && debugInfoB && debugInfoB->name.ends_with(".xml")) ? 1 : 0;
+			const auto xmlA = (m_version == 3 && debugDataA && debugDataA->name.ends_with(".xml")) ? 1 : 0;
+			const auto xmlB = (m_version == 3 && debugDataB && debugDataB->name.ends_with(".xml")) ? 1 : 0;
 			const auto idTypeA = a.first.GetIDType();
 			const auto idTypeB = b.first.GetIDType();
-			const auto indexA = (idTypeA == ResourceID::EIDType::GameChanger) ? a.first.GetIndex() : 0;
-			const auto indexB = (idTypeB == ResourceID::EIDType::GameChanger) ? b.first.GetIndex() : 0;
-			const auto resTypeIDA = (idTypeA == ResourceID::EIDType::GameChanger) ? a.first.GetResourceTypeID() : 0;
-			const auto resTypeIDB = (idTypeB == ResourceID::EIDType::GameChanger) ? b.first.GetResourceTypeID() : 0;
+			const auto indexA = (idTypeA == ResourceID::IDType::GameChanger) ? a.first.GetIndex() : 0;
+			const auto indexB = (idTypeB == ResourceID::IDType::GameChanger) ? b.first.GetIndex() : 0;
+			const auto resTypeIDA = (idTypeA == ResourceID::IDType::GameChanger) ? a.first.GetResourceTypeID() : 0;
+			const auto resTypeIDB = (idTypeB == ResourceID::IDType::GameChanger) ? b.first.GetResourceTypeID() : 0;
 			const auto idA = a.first.GetGameChangerID();
 			const auto idB = b.first.GetGameChangerID();
 
@@ -366,7 +366,7 @@ bool BND2::Save(binaryio::BinaryWriter &writer)
 	return true;
 }
 
-std::optional<Resource> BND2::GetResource(ResourceKey resourceKey) const
+std::optional<Resource> Bnd2::GetResource(ResourceKey resourceKey) const
 {
 	const auto it = m_entries.find(resourceKey);
 	if (it == m_entries.end())
@@ -395,10 +395,10 @@ std::optional<Resource> BND2::GetResource(ResourceKey resourceKey) const
 		buffers[0] = { std::move(buffer), buffers[0].GetSize(), buffers[0].GetAlignment() };
 	}
 
-	return Resource{ std::move(buffers), std::move(imports) };
+	return Resource{ std::move(buffers), std::move(imports), it->second.resourceType };
 }
 
-ResourceID BND2::GetDefaultResourceID() const
+ResourceID Bnd2::GetDefaultResourceID() const
 {
 	if (m_version < 5)
 		return Base::GetDefaultResourceID();
@@ -406,7 +406,7 @@ ResourceID BND2::GetDefaultResourceID() const
 	return m_defaultResourceID;
 }
 
-int32_t BND2::GetDefaultResourceStreamIndex() const
+int32_t Bnd2::GetDefaultResourceStreamIndex() const
 {
 	if (m_version < 5)
 		return Base::GetDefaultResourceStreamIndex();
@@ -414,7 +414,7 @@ int32_t BND2::GetDefaultResourceStreamIndex() const
 	return m_defaultResourceStreamIndex;
 }
 
-std::string BND2::GetStreamName(uint8_t index) const
+std::string Bnd2::GetStreamName(uint8_t index) const
 {
 	if (m_version < 5 || index >= kStreamLimit)
 		return Base::GetStreamName(index);
@@ -422,7 +422,7 @@ std::string BND2::GetStreamName(uint8_t index) const
 	return m_streamNames[index];
 }
 
-std::vector<MemoryType> BND2::GetMemoryTypes() const
+std::vector<MemoryType> Bnd2::GetMemoryTypes() const
 {
 	auto types = Base::GetMemoryTypes();
 
@@ -445,7 +445,7 @@ std::vector<MemoryType> BND2::GetMemoryTypes() const
 	return types;
 }
 
-bool BND2::IsValidPlatform() const
+bool Bnd2::IsValidPlatform() const
 {
 	bool valid = Base::IsValidPlatform();
 
@@ -455,20 +455,20 @@ bool BND2::IsValidPlatform() const
 	return valid;
 }
 
-std::vector<ResourceKey> BND2::SortedDebugDataKeys() const
+std::vector<ResourceKey> Bnd2::SortedDebugDataKeys() const
 {
 	// TODO: This is correct for every bundle except REVERBROADDATA.BNDL
 
-	const auto keys = std::views::keys(m_debugInfoEntries);
+	const auto keys = std::views::keys(m_debugDataEntries);
 	std::vector<ResourceKey> sortedKeys{ keys.begin(), keys.end() };
 	std::sort(sortedKeys.begin(), sortedKeys.end(), [this](const auto &a, const auto &b) {
 		if (m_version < 5)
 		{
-			const auto &debugInfoA = m_debugInfoEntries.at(a);
-			const auto &debugInfoB = m_debugInfoEntries.at(b);
+			const auto &debugDataA = m_debugDataEntries.at(a);
+			const auto &debugDataB = m_debugDataEntries.at(b);
 
-			const auto xmlA = (debugInfoA.name.ends_with(".xml")) ? 1 : 0;
-			const auto xmlB = (debugInfoB.name.ends_with(".xml")) ? 1 : 0;
+			const auto xmlA = (debugDataA.name.ends_with(".xml")) ? 1 : 0;
+			const auto xmlB = (debugDataB.name.ends_with(".xml")) ? 1 : 0;
 
 			return std::tie(xmlA, a.first) < std::tie(xmlB, b.first);
 		}
@@ -480,14 +480,14 @@ std::vector<ResourceKey> BND2::SortedDebugDataKeys() const
 	return sortedKeys;
 }
 
-std::vector<std::pair<std::string, std::string>> BND2::GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugInfoEntry &debugInfo) const
+std::vector<std::pair<std::string, std::string>> Bnd2::GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugDataEntry &debugData) const
 {
-	auto attributes = Base::GetDebugDataAttributes(resourceKey, debugInfo);
+	auto attributes = Base::GetDebugDataAttributes(resourceKey, debugData);
 
 	if (m_version >= 3)
 	{
 		if (m_entries.size() == 1 && m_defaultResourceStreamIndex == resourceKey.second && !(m_flags & Flags::Compressed)
-			|| (m_version == 3 && debugInfo.name.ends_with(".xml")))
+			|| (m_version == 3 && debugData.name.ends_with(".xml")))
 		{
 			auto it = std::ranges::find(attributes, "id", &std::pair<std::string, std::string>::first);
 			it->second.assign(std::format("{:016x}", static_cast<uint64_t>(resourceKey.first)));
@@ -511,7 +511,7 @@ std::vector<std::pair<std::string, std::string>> BND2::GetDebugDataAttributes(co
 	return attributes;
 }
 
-std::optional<uint8_t> BND2::MapFileBlockToLibBlock(uint8_t block) const
+std::optional<uint8_t> Bnd2::MapFileBlockToLibBlock(uint8_t block) const
 {
 	std::optional<MemoryType> mappedType = {};
 	switch (block)

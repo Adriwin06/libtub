@@ -9,26 +9,32 @@
 #include <vector>
 #include <version>
 
-#if __cpp_lib_constexpr_memory > 202202L
-#define LIBBNDL_BUFFER_CONSTEXPR constexpr
+#if __cpp_lib_constexpr_memory >= 202202L
+#	define LIBBNDL_BUFFER_CONSTEXPR constexpr
 #else
-#define LIBBNDL_BUFFER_CONSTEXPR
+#	define LIBBNDL_BUFFER_CONSTEXPR
+#endif
+
+#if __cpp_constexpr >= 202207L
+#	define LIBBNDL_DEFAULT_MOVE_CONSTEXPR constexpr
+#else
+#	define LIBBNDL_DEFAULT_MOVE_CONSTEXPR
 #endif
 
 #ifdef __cpp_lib_to_underlying
-#define LIBBNDL_TO_UNDERLYING(x) std::to_underlying(x)
+#	define LIBBNDL_TO_UNDERLYING(x) std::to_underlying(x)
 #else
-#define LIBBNDL_TO_UNDERLYING(x) static_cast<std::underlying_type_t<std::remove_reference_t<decltype(x)>>>(x)
+#	define LIBBNDL_TO_UNDERLYING(x) static_cast<std::underlying_type_t<std::remove_reference_t<decltype(x)>>>(x)
 #endif
 
 namespace libbndl
 {
 	namespace Formats { class Base; }
 
-	enum class MagicNumber : uint8_t
+	enum class Magic : uint8_t
 	{
-		BNDL = 1,
-		BND2 = 2
+		Bndl = 1,
+		Bnd2 = 2
 	};
 
 	enum class Platform : uint16_t
@@ -388,17 +394,17 @@ namespace libbndl
 		using UnderlyingType = uint64_t;
 
 	public:
-		enum class EIDType : uint8_t
+		enum class IDType : uint8_t
 		{
-			Normal = 0x0,
-			GameChanger = 0x1,
-			ResourceList = 0x80,
-			DeltaBundle = 0xC0
+#define LIBBNDL_ENUM_ID_TYPE(name, _, value) name = value,
+#include <libbndl/internal/enum.inc>
+#undef LIBBNDL_ENUM_ID_TYPE
 		};
 
 		constexpr ResourceID() noexcept : m_id(0) {}
-		constexpr ResourceID(uint32_t id, uint16_t type, uint8_t index, EIDType idType) noexcept
+		constexpr ResourceID(uint32_t id, uint16_t type, uint8_t index, IDType idType) noexcept
 			: m_id(id | (static_cast<uint64_t>(type) << 32) | (static_cast<uint64_t>(index) << 48) || (static_cast<uint64_t>(idType) << 56)) {}
+		LIBBNDL_EXPORT explicit ResourceID(const std::string &name) noexcept;
 		constexpr explicit ResourceID(UnderlyingType id) noexcept : m_id(id) {}
 
 		[[nodiscard]] constexpr bool operator==(const ResourceID &id) const noexcept = default;
@@ -409,7 +415,7 @@ namespace libbndl
 		[[nodiscard]] constexpr uint32_t GetID32() const noexcept { return GetGameChangerID(); }
 		[[nodiscard]] constexpr uint16_t GetResourceTypeID() const noexcept { return (m_id >> 32) & 0xFFFF; }
 		[[nodiscard]] constexpr uint8_t GetIndex() const noexcept { return (m_id >> 48) & 0xFF; }
-		[[nodiscard]] constexpr EIDType GetIDType() const noexcept { return static_cast<EIDType>((m_id >> 56) & 0xFF); }
+		[[nodiscard]] constexpr IDType GetIDType() const noexcept { return static_cast<IDType>((m_id >> 56) & 0xFF); }
 
 		[[nodiscard]] constexpr explicit operator uint32_t() const noexcept { return GetGameChangerID(); }
 		[[nodiscard]] constexpr explicit operator UnderlyingType() const noexcept { return m_id; }
@@ -418,10 +424,10 @@ namespace libbndl
 		UnderlyingType m_id;
 	};
 
-	class ResourceDebugInfo
+	class ResourceDebugData
 	{
 	public:
-		constexpr ResourceDebugInfo(std::string name, std::string typeName) : m_name(std::move(name)), m_typeName(std::move(typeName)) {}
+		constexpr ResourceDebugData(std::string name, std::string typeName) noexcept : m_name(std::move(name)), m_typeName(std::move(typeName)) {}
 
 		[[nodiscard]] constexpr std::string GetName() const noexcept { return m_name; }
 		[[nodiscard]] constexpr std::string GetTypeName() const noexcept { return m_typeName; }
@@ -440,9 +446,10 @@ namespace libbndl
 			ResourceHandle = 1
 		};
 
-		constexpr Import(ResourceID resourceID, uint32_t offset) : m_resourceID(resourceID), m_offset(offset) {}
-		constexpr Import(ResourceID resourceID, uint32_t offset, ImportType type)
+		constexpr Import(ResourceID resourceID, uint32_t offset, ImportType type = ImportType::Pointer) noexcept
 			: m_resourceID(resourceID), m_offset(offset | (static_cast<uint32_t>(type) << 31)) {}
+		Import(const std::string &resourceName, uint32_t offset, ImportType type = ImportType::Pointer) noexcept
+			: Import(ResourceID(resourceName), offset, type) {}
 
 		[[nodiscard]] constexpr ResourceID GetResourceID() const noexcept { return m_resourceID; }
 		[[nodiscard]] constexpr uint32_t GetOffset() const noexcept { return m_offset & 0x7FFFFFFF; }
@@ -463,9 +470,9 @@ namespace libbndl
 		using iterator = value_type *;
 		using const_iterator = const value_type *;
 
-		constexpr Buffer() : m_ptr({}), m_size(0), m_alignment(0) {}
-		Buffer(std::unique_ptr<value_type[]> ptr, size_type size, uint32_t alignment) : m_ptr(std::move(ptr)), m_size(size), m_alignment(alignment) {}
-		Buffer(Buffer &&other) noexcept : m_ptr(std::move(other.m_ptr)), m_size(other.m_size), m_alignment(other.m_alignment) {}
+		constexpr Buffer() noexcept : m_ptr({}), m_size(0), m_alignment(0) {}
+		Buffer(std::unique_ptr<value_type[]> ptr, size_type size, uint32_t alignment) noexcept : m_ptr(std::move(ptr)), m_size(size), m_alignment(alignment) {}
+		LIBBNDL_DEFAULT_MOVE_CONSTEXPR Buffer(Buffer &&other) noexcept = default;
 
 		[[nodiscard]] constexpr size_type GetSize() const noexcept { return m_size; }
 		[[nodiscard]] constexpr uint32_t GetAlignment() const noexcept { return m_alignment; }
@@ -495,29 +502,34 @@ namespace libbndl
 	class Resource
 	{
 	public:
-		Resource(std::array<Buffer, 4> buffers, std::vector<Import> imports) : m_buffers(std::move(buffers)), m_imports(std::move(imports)) {}
+		constexpr Resource(uint32_t resourceType) : m_buffers(), m_imports(), m_resourceType(resourceType) {}
+		Resource(std::array<Buffer, 4> buffers, std::vector<Import> imports, uint32_t resourceType) : m_buffers(std::move(buffers)), m_imports(std::move(imports)), m_resourceType(resourceType) {}
 
+		[[nodiscard]] constexpr Buffer &GetBinary(MemoryType block) { return m_buffers[LIBBNDL_TO_UNDERLYING(block)]; }
 		[[nodiscard]] constexpr const Buffer &GetBinary(MemoryType block) const { return m_buffers[LIBBNDL_TO_UNDERLYING(block)]; }
-		[[nodiscard]] constexpr const std::vector<Import> GetImports() const { return m_imports; }
+		[[nodiscard]] constexpr std::vector<Import> GetImports() const noexcept { return m_imports; }
+		[[nodiscard]] constexpr uint32_t GetResourceType() const noexcept { return m_resourceType; }
 
 		void ReplaceBinary(MemoryType block, Buffer &&buffer) { m_buffers[LIBBNDL_TO_UNDERLYING(block)] = std::move(buffer); }
+		void AddImport(Import import) { m_imports.emplace_back(std::move(import)); }
 
 	private:
 		std::array<Buffer, 4> m_buffers;
 		std::vector<Import> m_imports;
+		uint32_t m_resourceType;
 	};
 
 	class Bundle
 	{
 	public:
 		LIBBNDL_EXPORT Bundle();
-		LIBBNDL_EXPORT Bundle(MagicNumber magicNumber, uint16_t version, Platform platform, Flags flags); // For creating new bundles
+		LIBBNDL_EXPORT Bundle(Magic magic, uint16_t version, Platform platform, Flags flags);
 		LIBBNDL_EXPORT ~Bundle();
 
 		LIBBNDL_EXPORT bool Load(const std::string &name);
 		LIBBNDL_EXPORT bool Save(const std::string &name);
 
-		[[nodiscard]] LIBBNDL_EXPORT MagicNumber GetMagicNumber() const;
+		[[nodiscard]] LIBBNDL_EXPORT Magic GetMagic() const;
 		[[nodiscard]] LIBBNDL_EXPORT uint16_t GetVersion() const;
 		[[nodiscard]] LIBBNDL_EXPORT Platform GetPlatform() const;
 		[[nodiscard]] LIBBNDL_EXPORT Flags GetFlags() const;
@@ -525,23 +537,17 @@ namespace libbndl
 		[[nodiscard]] LIBBNDL_EXPORT bool IsBurnoutEra() const;
 		[[nodiscard]] LIBBNDL_EXPORT bool IsNeedForSpeedEra() const;
 
-		[[nodiscard]] LIBBNDL_EXPORT std::optional<ResourceDebugInfo> GetResourceDebugInfo(const std::string &resourceName, uint8_t streamIndex = 0) const;
-		[[nodiscard]] LIBBNDL_EXPORT std::optional<ResourceDebugInfo> GetResourceDebugInfo(ResourceID resourceID, uint8_t streamIndex = 0) const;
-		[[nodiscard]] LIBBNDL_EXPORT std::optional<uint32_t> GetResourceType(const std::string &resourceName, uint8_t streamIndex = 0) const;
+		[[nodiscard]] LIBBNDL_EXPORT std::optional<ResourceDebugData> GetResourceDebugData(ResourceID resourceID, uint8_t streamIndex = 0) const;
 		[[nodiscard]] LIBBNDL_EXPORT std::optional<uint32_t> GetResourceType(ResourceID resourceID, uint8_t streamIndex = 0) const;
-		[[nodiscard]] LIBBNDL_EXPORT std::optional<Resource> GetResource(const std::string &resourceName, uint8_t streamIndex = 0) const;
 		[[nodiscard]] LIBBNDL_EXPORT std::optional<Resource> GetResource(ResourceID resourceID, uint8_t streamIndex = 0) const;
-		[[nodiscard]] LIBBNDL_EXPORT Buffer GetBinary(const std::string &resourceName, MemoryType memoryType, uint8_t streamIndex = 0) const;
 		[[nodiscard]] LIBBNDL_EXPORT Buffer GetBinary(ResourceID resourceID, MemoryType memoryType, uint8_t streamIndex = 0) const;
 
-		LIBBNDL_EXPORT bool AddResource(const std::string &resourceName, const Resource &data, uint32_t resourceType, uint8_t streamIndex = 0);
-		LIBBNDL_EXPORT bool AddResource(ResourceID resourceID, const Resource &data, uint32_t resourceType, uint8_t streamIndex = 0);
-		LIBBNDL_EXPORT bool AddResourceDebugInfo(const std::string &resourceName, const std::string &name, const std::string &type, uint8_t streamIndex = 0);
-		LIBBNDL_EXPORT bool AddResourceDebugInfo(ResourceID resourceID, const std::string &name, const std::string &type, uint8_t streamIndex = 0);
+		LIBBNDL_EXPORT bool AddResource(ResourceID resourceID, const Resource &resource, uint8_t streamIndex = 0);
+		LIBBNDL_EXPORT bool AddResourceDebugData(ResourceID resourceID, const ResourceDebugData &debugData, uint8_t streamIndex = 0);
 
-		LIBBNDL_EXPORT bool ReplaceResource(const std::string &resourceName, const Resource &data, uint8_t streamIndex = 0);
 		LIBBNDL_EXPORT bool ReplaceResource(ResourceID resourceID, const Resource &data, uint8_t streamIndex = 0);
 
+		[[nodiscard]] LIBBNDL_EXPORT uint32_t GetResourceCount() const;
 		[[nodiscard]] LIBBNDL_EXPORT std::vector<ResourceID> GetResourceIDs() const;
 		[[nodiscard]] LIBBNDL_EXPORT std::map<uint32_t, std::vector<ResourceID>> GetResourceIDsByType() const;
 		[[nodiscard]] LIBBNDL_EXPORT std::vector<uint8_t> GetResourceStreamIndices(ResourceID resourceID) const;
@@ -554,7 +560,5 @@ namespace libbndl
 
 	private:
 		std::unique_ptr<Formats::Base> m_impl;
-
-		[[nodiscard]] ResourceID HashResourceName(std::string resourceName) const;
 	};
 }

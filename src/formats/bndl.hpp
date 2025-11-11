@@ -5,7 +5,7 @@ namespace libbndl
 {
 	namespace Formats
 	{
-		class BNDL : public Base
+		class Bndl : public Base
 		{
 		public:
 			using Base::Base;
@@ -13,7 +13,7 @@ namespace libbndl
 			virtual bool Load(binaryio::BinaryReader &reader) override;
 			virtual bool Save(binaryio::BinaryWriter &reader) override;
 
-			[[nodiscard]] virtual constexpr MagicNumber GetMagicNumber() const override { return MagicNumber::BNDL; }
+			[[nodiscard]] virtual constexpr Magic GetMagic() const override { return Magic::Bndl; }
 
 			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceKey resourceKey) const override;
 

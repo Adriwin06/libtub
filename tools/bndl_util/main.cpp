@@ -43,27 +43,20 @@ static std::string cleanResourceNameForIO(const std::string &resourceName)
 
 static std::string resourceIDToString(const ResourceID &resourceID)
 {
-	return std::format("0x{:{}X}", static_cast<uint64_t>(resourceID), (resourceID.GetIDType() != ResourceID::EIDType::Normal) ? 16 : 8);
+	return std::format("0x{:0{}X}", static_cast<uint64_t>(resourceID), (resourceID.GetIDType() != ResourceID::IDType::Normal) ? 16 : 8);
 }
 
-static std::string getDebugName(const Bundle &arch, const std::optional<ResourceDebugInfo> &debugInfo, const std::string &fallback)
+static std::string getDebugName(const Bundle &arch, const std::optional<ResourceDebugData> &debugData, const std::string &fallback)
 {
-	std::ostringstream name;
-	if (debugInfo)
+	if (debugData)
 	{
-		const auto cleanedName = cleanResourceNameForIO(debugInfo->GetName());
+		const auto cleanedName = cleanResourceNameForIO(debugData->GetName());
 
-		if (arch.GetResourceDebugInfo(cleanResourceNameForHash(debugInfo->GetName())) && std::all_of(cleanedName.begin(), cleanedName.end(), [](char c) { return std::isalnum(c) || c == '.' || c == '-' || c == '_' || c == '~' || c == '(' || c == ')' || c == ',' || c == '+' || c == ' '; }))
-			name << cleanedName;
-		else
-			name << fallback;
-	}
-	else
-	{
-		name << fallback;
+		if (arch.GetResourceDebugData(ResourceID(cleanResourceNameForHash(debugData->GetName()))) && std::all_of(cleanedName.begin(), cleanedName.end(), [](char c) { return std::isalnum(c) || c == '.' || c == '-' || c == '_' || c == '~' || c == '(' || c == ')' || c == ',' || c == '+' || c == ' '; }))
+			return cleanedName;
 	}
 
-	return name.str();
+	return fallback;
 }
 
 int main(int argc, char** argv)
@@ -131,16 +124,16 @@ int main(int argc, char** argv)
 			{
 				for (const auto &streamIndex : arch.GetResourceStreamIndices(resourceID))
 				{
-					const auto debugInfo = arch.GetResourceDebugInfo(resourceID, streamIndex);
+					const auto debugData = arch.GetResourceDebugData(resourceID, streamIndex);
 					const auto resourceType = *arch.GetResourceType(resourceID, streamIndex);
 					std::ostringstream name;
-					if (debugInfo)
-						name << debugInfo->GetName();
+					if (debugData)
+						name << debugData->GetName();
 					else
 						name << std::hex << static_cast<uint64_t>(resourceID);
 					std::ostringstream typeName;
-					if (debugInfo)
-						typeName << debugInfo->GetTypeName();
+					if (debugData)
+						typeName << debugData->GetTypeName();
 					else
 						typeName << std::hex << resourceType;
 					std::cout << std::left << std::setw(70) << name.str() << std::right << typeName.str() << std::endl;
@@ -190,7 +183,7 @@ int main(int argc, char** argv)
 				pugi::xml_document doc;
 				auto configRoot = doc.append_child("Bundle");
 
-				configRoot.append_attribute("version").set_value((std::to_string(static_cast<uint32_t>(arch.GetMagicNumber())) + "." + std::to_string(arch.GetVersion())));
+				configRoot.append_attribute("version").set_value((std::to_string(static_cast<uint32_t>(arch.GetMagic())) + "." + std::to_string(arch.GetVersion())));
 
 				const auto platform = arch.GetPlatform();
 				std::string platformName;
@@ -216,7 +209,7 @@ int main(int argc, char** argv)
 
 				const auto flags = arch.GetFlags();
 				configRoot.append_attribute("compressed").set_value(!!(flags & Flags::Compressed));
-				if (arch.GetMagicNumber() == MagicNumber::BND2 && arch.GetVersion() < 5)
+				if (arch.GetMagic() == Magic::Bnd2 && arch.GetVersion() < 5)
 				{
 					configRoot.append_attribute("mainMemOptimised").set_value(!!(flags & Flags::MainMemOptimised));
 					configRoot.append_attribute("graphicsMemOptimised").set_value(!!(flags & Flags::GraphicsMemOptimised));
@@ -231,8 +224,8 @@ int main(int argc, char** argv)
 					{
 						if (flags & Flags::ContainsDefaultResource)
 						{
-							const auto debugInfo = arch.GetResourceDebugInfo(arch.GetDefaultResourceID());
-							const auto defaultName = getDebugName(arch, debugInfo, resourceIDToString(arch.GetDefaultResourceID()));
+							const auto debugData = arch.GetResourceDebugData(arch.GetDefaultResourceID());
+							const auto defaultName = getDebugName(arch, debugData, resourceIDToString(arch.GetDefaultResourceID()));
 							configRoot.append_attribute("defaultResource").set_value(defaultName);
 							configRoot.append_attribute("defaultStreamIndex").set_value(arch.GetDefaultResourceStreamIndex());
 						}
@@ -259,11 +252,11 @@ int main(int argc, char** argv)
 
 					for (const auto &streamIndex : arch.GetResourceStreamIndices(resourceID))
 					{
-						const auto debugInfo = arch.GetResourceDebugInfo(resourceID);
+						const auto debugData = arch.GetResourceDebugData(resourceID);
 						const auto resourceType = *arch.GetResourceType(resourceID, streamIndex);
 						const auto data = *arch.GetResource(resourceID, streamIndex);
 
-						auto name = getDebugName(arch, debugInfo, idStr);
+						auto name = getDebugName(arch, debugData, idStr);
 						if (streamIndex > 0)
 							name += ".stream" + std::to_string(streamIndex);
 
@@ -334,9 +327,9 @@ int main(int argc, char** argv)
 							for (const auto &import : imports)
 							{
 								auto entryChild = importsRoot.append_child("Import");
-								const auto depDebugInfo = arch.GetResourceDebugInfo(import.GetResourceID());
-								if (depDebugInfo)
-									entryChild.append_attribute("name").set_value(depDebugInfo->GetName());
+								const auto depDebugData = arch.GetResourceDebugData(import.GetResourceID());
+								if (depDebugData)
+									entryChild.append_attribute("name").set_value(depDebugData->GetName());
 								else
 									entryChild.append_attribute("id").set_value(resourceIDToString(import.GetResourceID()));
 
@@ -353,19 +346,19 @@ int main(int argc, char** argv)
 						}
 
 						auto entryChild = configRoot.append_child("Resource");
-						if (!debugInfo || debugInfo->GetName().empty())
+						if (!debugData || debugData->GetName().empty())
 							entryChild.append_attribute("id").set_value(idStr);
 						else
-							entryChild.append_attribute("name").set_value(debugInfo->GetName());
-						if (!debugInfo || debugInfo->GetTypeName().empty())
+							entryChild.append_attribute("name").set_value(debugData->GetName());
+						if (!debugData || debugData->GetTypeName().empty())
 							entryChild.append_attribute("typeDebugName").set_value(pathTypeNameStream.str());
 						else
-							entryChild.append_attribute("typeDebugName").set_value(debugInfo->GetTypeName());
+							entryChild.append_attribute("typeDebugName").set_value(debugData->GetTypeName());
 						if (arch.IsNeedForSpeedEra() && (flags & Flags::MultistreamBundle))
 							entryChild.append_attribute("streamIndex").set_value(streamIndex);
 
-						if (debugInfo && !debugInfo->GetName().empty())
-							debugName = debugInfo->GetName();
+						if (debugData && !debugData->GetName().empty())
+							debugName = debugData->GetName();
 					}
 
 					manifest << idStr << " = " << debugName << std::endl;

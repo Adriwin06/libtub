@@ -5,7 +5,7 @@ namespace libbndl
 {
 	namespace Formats
 	{
-		class BND2 : public Base
+		class Bnd2 : public Base
 		{
 		public:
 			using Base::Base;
@@ -13,7 +13,7 @@ namespace libbndl
 			virtual bool Load(binaryio::BinaryReader &reader) override;
 			virtual bool Save(binaryio::BinaryWriter &reader) override;
 
-			[[nodiscard]] virtual constexpr MagicNumber GetMagicNumber() const override { return MagicNumber::BND2; }
+			[[nodiscard]] virtual constexpr Magic GetMagic() const override { return Magic::Bnd2; }
 
 			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceKey resourceKey) const override;
 
@@ -28,7 +28,7 @@ namespace libbndl
 			virtual bool IsValidPlatform() const override;
 
 			virtual std::vector<ResourceKey> SortedDebugDataKeys() const override;
-			virtual std::vector<std::pair<std::string, std::string>> GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugInfoEntry &debugInfo) const override;
+			virtual std::vector<std::pair<std::string, std::string>> GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugDataEntry &debugData) const override;
 
 		private:
 			ResourceID m_defaultResourceID;
