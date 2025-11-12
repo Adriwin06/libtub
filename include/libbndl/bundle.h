@@ -2,7 +2,9 @@
 #ifdef __cplusplus
 #include <libbndl/bundle.hpp>
 #endif
+#ifndef LIBBNDL_EXPORT
 #include <libbndl/internal/export.h>
+#endif
 #include <stdbool.h>
 #include <stdint.h>
 
