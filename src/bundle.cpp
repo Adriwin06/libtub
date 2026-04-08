@@ -1012,7 +1012,7 @@ bool Bundle::ReplaceResource(uint32_t resourceID, const EntryData &data)
 			const auto depSize = writer.GetSize();
 			auto depStream = writer.GetStream();
 
-			const auto inSize = inDataInfo->size();
+			auto inSize = inDataInfo->size();
 			binaryio::Align(inSize, 16);
 			inBuffer = std::make_unique<std::vector<uint8_t>>(inSize + depSize);
 			inBuffer->assign(inDataInfo->begin(), inDataInfo->end());
