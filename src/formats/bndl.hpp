@@ -1,7 +1,7 @@
 #pragma once
 #include "base.hpp"
 
-namespace libbndl::Formats
+namespace libtub::Formats
 {
 	class Bndl : public Base
 	{

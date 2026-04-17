@@ -1,7 +1,7 @@
 #pragma once
 #include "base.hpp"
 
-namespace libbndl::Formats
+namespace libtub::Formats
 {
 	class Bnd2 : public Base
 	{
@@ -18,6 +18,8 @@ namespace libbndl::Formats
 		[[nodiscard]] ResourceID GetDefaultResourceID() const override;
 		[[nodiscard]] int32_t GetDefaultResourceStreamIndex() const override;
 		[[nodiscard]] std::string GetStreamName(uint8_t index) const override;
+		bool SetDefaultResource(ResourceKey resourceKey) override;
+		bool SetStreamName(uint8_t index, const std::string &name) override;
 
 		[[nodiscard]] std::vector<MemoryType> GetMemoryTypes() const override;
 
@@ -29,9 +31,9 @@ namespace libbndl::Formats
 		[[nodiscard]] std::vector<std::pair<std::string, std::string>> GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugDataEntry &debugData) const override;
 
 	private:
-		ResourceID m_defaultResourceID;
-		int32_t m_defaultResourceStreamIndex;
-		std::array<std::string, kStreamLimit> m_streamNames;
+		ResourceID m_defaultResourceID{};
+		int32_t m_defaultResourceStreamIndex = -1;
+		std::array<std::string, kStreamLimit> m_streamNames{};
 
 		[[nodiscard]] std::optional<uint8_t> MapFileBlockToLibBlock(uint8_t block) const;
 	};

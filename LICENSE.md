@@ -1,5 +1,6 @@
 MIT License
 
+Fork copyright (c) 2026 Adriwin
 Library copyright (c) 2018 Bo Anderson
 Tools copyright (c) 2017 Stephan Vedder
 

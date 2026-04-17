@@ -7,14 +7,14 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
-        "LIBBNDL_BUILD_TOOLS": "ON",
-        "LIBBNDL_INSTALL_TOOLS": "ON",
-        "LIBBNDL_BUILD_VALIDATIONTEST": "ON"
+        "LIBTUB_BUILD_TOOLS": "ON",
+        "LIBTUB_INSTALL_TOOLS": "ON",
+        "LIBTUB_BUILD_VALIDATIONTEST": "ON"
       },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
           "enableMicrosoftCodeAnalysis": true,
-          "codeAnalysisRuleset": "${sourceDir}/libbndl.ruleset",
+          "codeAnalysisRuleset": "${sourceDir}/libtub.ruleset",
           "disableExternalAnalysis": true,
           "enableClangTidyCodeAnalysis": true
         }

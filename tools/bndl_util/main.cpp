@@ -10,7 +10,7 @@
 #include <pugixml.hpp>
 #include "types.hpp"
 
-using namespace libbndl;
+using namespace libtub;
 
 namespace
 {

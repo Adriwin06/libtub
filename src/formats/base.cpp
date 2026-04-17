@@ -8,8 +8,8 @@
 #include <zlib.h>
 #include <binaryio/binaryreader.hpp>
 
-using namespace libbndl;
-using namespace libbndl::Formats;
+using namespace libtub;
+using namespace libtub::Formats;
 
 Base::Base(uint16_t version, Platform platform, Flags flags) : m_version(version), m_platform(platform), m_flags(flags) {}
 
@@ -39,7 +39,7 @@ Buffer Base::GetBinary(ResourceKey resourceKey, MemoryType memoryType) const
 
 	const auto &e = it->second;
 
-	const auto &dataInfo = e.descriptors[LIBBNDL_TO_UNDERLYING(memoryType)];
+	const auto &dataInfo = e.descriptors[LIBTUB_TO_UNDERLYING(memoryType)];
 
 	if (dataInfo.data == nullptr)
 		return {};
@@ -69,15 +69,16 @@ Buffer Base::GetBinary(ResourceKey resourceKey, MemoryType memoryType) const
 
 bool Base::AddResource(ResourceKey resourceKey, const Resource &resource)
 {
-	const auto it = m_entries.find(resourceKey);
-	if (it != m_entries.end() || m_entries.size() >= std::numeric_limits<uint32_t>::max() || resource.GetImports().size() > std::numeric_limits<uint16_t>::max())
+	if (m_entries.contains(resourceKey) || m_entries.size() >= std::numeric_limits<uint32_t>::max() || resource.GetImports().size() > std::numeric_limits<uint16_t>::max())
 		return false;
 
-	if (it->first.second >= kStreamLimit)
+	if (resourceKey.second >= kStreamLimit)
 		return false;
 
-	auto &e = it->second;
+	auto &e = m_entries[resourceKey];
 	e.resourceType = resource.GetResourceType();
+	if (resourceKey.second != 0)
+		m_flags |= Flags::MultistreamBundle;
 
 	if (!(m_flags & Flags::Compressed))
 	{
@@ -85,7 +86,7 @@ bool Base::AddResource(ResourceKey resourceKey, const Resource &resource)
 		// It's not clear how this is determined (see below) so we'll just assume 1.
 		for (const auto &memoryType : GetMemoryTypes())
 		{
-			auto &descriptor = e.descriptors[LIBBNDL_TO_UNDERLYING(memoryType)];
+			auto &descriptor = e.descriptors[LIBTUB_TO_UNDERLYING(memoryType)];
 			descriptor.onDiskAlignment = 1;
 		}
 	}
@@ -95,11 +96,10 @@ bool Base::AddResource(ResourceKey resourceKey, const Resource &resource)
 
 bool Base::AddResourceDebugData(ResourceKey resourceKey, std::string name, std::string typeName)
 {
-	const auto it = m_debugDataEntries.find(resourceKey);
-	if (it != m_debugDataEntries.end())
+	if (m_debugDataEntries.contains(resourceKey))
 		return false;
 
-	auto &debugData = it->second;
+	auto &debugData = m_debugDataEntries[resourceKey];
 	debugData.name = std::move(name);
 	debugData.typeName = std::move(typeName);
 
@@ -113,7 +113,7 @@ bool Base::ReplaceResource(ResourceKey resourceKey, const Resource &resource)
 	if (it == m_entries.end() || imports.size() > std::numeric_limits<uint16_t>::max())
 		return false;
 
-	if (it->first.second >= kStreamLimit)
+	if (resourceKey.second >= kStreamLimit)
 		return false;
 
 	auto &e = it->second;
@@ -125,7 +125,7 @@ bool Base::ReplaceResource(ResourceKey resourceKey, const Resource &resource)
 	for (const auto &memoryType : GetMemoryTypes())
 	{
 		const auto &inDataInfo = resource.GetBinary(memoryType);
-		auto &outDataInfo = e.descriptors[LIBBNDL_TO_UNDERLYING(memoryType)];
+		auto &outDataInfo = e.descriptors[LIBTUB_TO_UNDERLYING(memoryType)];
 
 		if (inDataInfo == nullptr)
 		{
@@ -147,7 +147,7 @@ bool Base::ReplaceResource(ResourceKey resourceKey, const Resource &resource)
 			for (const auto &import : imports)
 			{
 				WriteImport(writer, import);
-				e.importHash &= static_cast<uint64_t>(import.GetResourceID());
+				e.importHash |= static_cast<uint64_t>(import.GetResourceID());
 			}
 			const auto depSize = writer.GetSize();
 			auto depStream = writer.GetStream();
@@ -247,12 +247,22 @@ ResourceID Base::GetDefaultResourceID() const
 
 int32_t Base::GetDefaultResourceStreamIndex() const
 {
-	return 0;
+	return -1;
 }
 
 std::string Base::GetStreamName(uint8_t) const
 {
 	return "";
+}
+
+bool Base::SetDefaultResource(ResourceKey)
+{
+	return false;
+}
+
+bool Base::SetStreamName(uint8_t, const std::string &)
+{
+	return false;
 }
 
 std::vector<MemoryType> Base::GetMemoryTypes() const

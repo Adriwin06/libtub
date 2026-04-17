@@ -15,7 +15,7 @@
 #	define __has_builtin(x) 0
 #endif
 
-namespace libbndl::Formats
+namespace libtub::Formats
 {
 	inline unsigned long BitScanReverse(unsigned long input)
 	{
@@ -103,6 +103,8 @@ namespace libbndl::Formats
 		[[nodiscard]] virtual ResourceID GetDefaultResourceID() const;
 		[[nodiscard]] virtual int32_t GetDefaultResourceStreamIndex() const;
 		[[nodiscard]] virtual std::string GetStreamName(uint8_t index) const;
+		virtual bool SetDefaultResource(ResourceKey resourceKey);
+		virtual bool SetStreamName(uint8_t index, const std::string &name);
 
 		[[nodiscard]] virtual std::vector<MemoryType> GetMemoryTypes() const;
 

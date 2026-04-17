@@ -10,7 +10,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(cxxopts)
 FetchContent_GetProperties(pugixml)
 
-target_link_libraries(bndl_util PRIVATE libbndl cxxopts::cxxopts)
+target_link_libraries(bndl_util PRIVATE libtub cxxopts::cxxopts)
 if(TARGET pugixml::pugixml)
     target_link_libraries(bndl_util PRIVATE pugixml::pugixml)
 else()
@@ -24,6 +24,6 @@ if(MSVC)
     target_compile_options(bndl_util PRIVATE "/W4" "/Zc:throwingNew" "/EHsc")
 endif()
 
-if(LIBBNDL_INSTALL_TOOLS)
+if(LIBTUB_INSTALL_TOOLS)
     install(TARGETS bndl_util)
 endif()
