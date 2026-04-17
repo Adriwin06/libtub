@@ -305,8 +305,10 @@ namespace libtub
 		LIBTUB_EXPORT ~Bundle();
 
 		LIBTUB_EXPORT bool Load(const std::string &name);
+		LIBTUB_EXPORT bool Load(const std::filesystem::path &path);
 		LIBTUB_EXPORT bool Load(std::span<const uint8_t> data);
 		LIBTUB_EXPORT bool Save(const std::string &name);
+		LIBTUB_EXPORT bool Save(const std::filesystem::path &path);
 		[[nodiscard]] LIBTUB_EXPORT std::vector<uint8_t> SaveToMemory();
 
 		[[nodiscard]] LIBTUB_EXPORT Magic GetMagic() const;

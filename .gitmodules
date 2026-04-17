@@ -12,3 +12,6 @@
 	path = ref/libbndl-2025
 	url = git@github.com:Bo98/libbndl.git
 	branch = 2025
+[submodule "tests/third_party/libbndl-extractor"]
+	path = tests/third_party/libbndl-extractor
+	url = https://github.com/Adriwin06/libbndl-extractor.git

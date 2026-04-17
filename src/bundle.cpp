@@ -60,9 +60,14 @@ Bundle::~Bundle() = default;
 
 bool Bundle::Load(const std::string &name)
 {
+	return Load(std::filesystem::path(name));
+}
+
+bool Bundle::Load(const std::filesystem::path &path)
+{
 	std::ifstream stream;
 
-	stream.open(name, std::ios::in | std::ios::binary | std::ios::ate);
+	stream.open(path, std::ios::in | std::ios::binary | std::ios::ate);
 
 	// Check if archive exists
 	if (stream.fail())
@@ -101,6 +106,11 @@ bool Bundle::Load(std::span<const uint8_t> data)
 
 bool Bundle::Save(const std::string &name)
 {
+	return Save(std::filesystem::path(name));
+}
+
+bool Bundle::Save(const std::filesystem::path &path)
+{
 	auto writer = binaryio::BinaryWriter();
 
 	if (!m_impl->Save(writer))
@@ -108,7 +118,7 @@ bool Bundle::Save(const std::string &name)
 
 	const auto stream = writer.GetStream();
 
-	std::ofstream f(name, std::ios::out | std::ios::binary);
+	std::ofstream f(path, std::ios::out | std::ios::binary);
 	f << stream.rdbuf();
 	f.close();
 

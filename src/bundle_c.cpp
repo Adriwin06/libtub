@@ -37,7 +37,7 @@ libtub_error libtub_load(libtub_bundle *LIBTUB_NULLABLE *LIBTUB_NONNULL bundle, 
 	if (*bundle == nullptr)
 		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
-	if (!(*bundle)->Load(path))
+	if (!(*bundle)->Load(std::string(path)))
 	{
 		delete *bundle;
 		return LIBTUB_ERROR_INVALID_BUNDLE;
@@ -65,7 +65,7 @@ void libtub_free(libtub_bundle *LIBTUB_NULLABLE bundle)
 
 libtub_error libtub_save(libtub_bundle *LIBTUB_NONNULL bundle, const char *LIBTUB_NONNULL path)
 {
-	if (!bundle->Save(path))
+	if (!bundle->Save(std::string(path)))
 		return LIBTUB_ERROR_GENERIC_FAILURE;
 
 	return LIBTUB_ERROR_SUCCESS;
