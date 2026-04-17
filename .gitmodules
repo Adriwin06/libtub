@@ -1,0 +1,3 @@
+[submodule "tests/third_party/libbndl-extractor"]
+	path = tests/third_party/libbndl-extractor
+	url = https://github.com/Adriwin06/libbndl-extractor.git

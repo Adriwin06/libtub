@@ -15,3 +15,21 @@ if(WIN32)
 endif()
 
 add_test(NAME libtub.tests COMMAND libtub_tests)
+
+set(LIBTUB_TEST_GAME_PATHS "" CACHE STRING "Pipe-separated game roots for the recursive libtub game scan test.")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libbndl-extractor/CMakeLists.txt")
+    add_subdirectory(third_party/libbndl-extractor EXCLUDE_FROM_ALL)
+
+    if(LIBTUB_TEST_GAME_PATHS)
+        set(LIBTUB_GAME_SCAN_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/game-scan")
+        add_test(
+            NAME libtub.game_scan
+            COMMAND volatility_libtub_extract
+                --games "${LIBTUB_TEST_GAME_PATHS}"
+                --output "${LIBTUB_GAME_SCAN_OUTPUT_DIR}"
+                --failures "${LIBTUB_GAME_SCAN_OUTPUT_DIR}/failures.tsv"
+        )
+    endif()
+elseif(LIBTUB_TEST_GAME_PATHS)
+    message(FATAL_ERROR "LIBTUB_TEST_GAME_PATHS was provided but tests/third_party/libbndl-extractor is not checked out.")
+endif()
