@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+        build_type:
+          - Debug
+          - Release 
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Setup MSVC
+        if: runner.os == 'Windows'
+        uses: TheMrMilchmann/setup-msvc-dev@v3
+        with:
+          arch: x64
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.*
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            export CMAKE_GENERATOR=Ninja
+          fi
+          cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_INSTALL_PREFIX=install -DLIBBNDL_BUILD_TOOLS=ON -DLIBBNDL_BUILD_UI=ON -DLIBBNDL_INSTALL_UI=ON
+          cmake --build build
+          cmake --install build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libbndl-${{ matrix.build_type }}-${{ matrix.os }}
+          path: install/*

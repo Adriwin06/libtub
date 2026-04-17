@@ -6,9 +6,9 @@
 #include <QStackedLayout>
 #include <QLabel>
 #include <QTextEdit>
-#include <libbndl/bundle.hpp>
+#include <libtub/bundle.hpp>
 
-using namespace libbndl;
+using namespace libtub;
 
 class Editor : public QMainWindow
 {

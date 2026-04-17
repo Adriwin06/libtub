@@ -5,13 +5,13 @@ find_package(Qt6 COMPONENTS Widgets REQUIRED)
 
 add_executable(bndl_edit main.cpp editor.cpp editor.hpp)
 
-target_link_libraries(bndl_edit libbndl Qt6::Widgets)
+target_link_libraries(bndl_edit libtub Qt6::Widgets)
 target_include_directories(bndl_edit PRIVATE)
 
 target_compile_features(bndl_edit PRIVATE cxx_std_20)
 
-option(LIBBNDL_INSTALL_UI "Install UI tools" OFF)
-if(LIBBNDL_INSTALL_TOOLS AND LIBBNDL_INSTALL_UI)
+option(LIBTUB_INSTALL_UI "Install UI tools" OFF)
+if(LIBTUB_INSTALL_TOOLS AND LIBTUB_INSTALL_UI)
     install(TARGETS bndl_edit)
 
     if(CMAKE_CXX_LINKER_SUPPORTS_PDB)

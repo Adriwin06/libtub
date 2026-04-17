@@ -2,7 +2,7 @@ add_executable(bndl_validationtest main.cpp)
 
 FetchContent_GetProperties(pugixml)
 
-target_link_libraries(bndl_validationtest PRIVATE libbndl cxxopts::cxxopts)
+target_link_libraries(bndl_validationtest PRIVATE libtub cxxopts::cxxopts)
 if(TARGET pugixml::pugixml)
     target_link_libraries(bndl_validationtest PRIVATE pugixml::pugixml)
 else()
@@ -16,6 +16,6 @@ if(MSVC)
     target_compile_options(bndl_validationtest PRIVATE "/W4" "/Zc:throwingNew" "/EHsc")
 endif()
 
-if(LIBBNDL_INSTALL_TOOLS)
+if(LIBTUB_INSTALL_TOOLS)
     install(TARGETS bndl_validationtest)
 endif()

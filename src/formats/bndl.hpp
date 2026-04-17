@@ -1,7 +1,7 @@
 #pragma once
 #include "base.hpp"
 
-namespace libbndl
+namespace libtub
 {
 	namespace Formats
 	{

@@ -1,4 +1,4 @@
-#include <libbndl/bundle.hpp>
+#include <libtub/bundle.hpp>
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 
 		const auto path = entry.path();
 
-		libbndl::Bundle bundle;
+		libtub::Bundle bundle;
 
 		if (!bundle.Load(path.string()))
 		{

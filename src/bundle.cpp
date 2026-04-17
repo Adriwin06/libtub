@@ -1,14 +1,30 @@
-#include <libbndl/bundle.hpp>
+#include <libtub/bundle.hpp>
 #include "formats/bndl.hpp"
 #include "formats/bnd2.hpp"
 #include <binaryio/binaryreader.hpp>
 #include <binaryio/binarywriter.hpp>
 #include <algorithm>
 #include <fstream>
+#include <limits>
 #include <locale>
+#include <set>
+#include <stdexcept>
+#include <tuple>
 #include <zlib.h>
 
-using namespace libbndl;
+using namespace libtub;
+
+namespace
+{
+	std::unique_ptr<Formats::Base> MakeBundleImplementation(const std::string &magic)
+	{
+		if (magic == "bndl")
+			return std::make_unique<Formats::Bndl>();
+		if (magic == "bnd2")
+			return std::make_unique<Formats::Bnd2>();
+		return {};
+	}
+}
 
 ResourceID::ResourceID(const std::string &name) noexcept
 {
@@ -31,9 +47,13 @@ Bundle::Bundle(Magic magic, uint16_t version, Platform platform, Flags flags)
 		m_impl = std::make_unique<Formats::Bnd2>(version, platform, flags);
 		break;
 	default:
-		throw new std::invalid_argument("Invalid magic number");
+		throw std::invalid_argument("Invalid magic number");
 	}
 }
+
+Bundle::Bundle(Bundle &&other) noexcept = default;
+
+Bundle &Bundle::operator=(Bundle &&other) noexcept = default;
 
 Bundle::~Bundle() = default;
 
@@ -59,15 +79,20 @@ bool Bundle::Load(const std::string &name)
 	if (stream.fail())
 		return false;
 
+	return Load(buffer);
+}
+
+bool Bundle::Load(std::span<const uint8_t> data)
+{
+	if (data.size() < 4)
+		return false;
+
+	std::vector<uint8_t> buffer(data.begin(), data.end());
 	auto reader = binaryio::BinaryReader(buffer, std::endian::little);
 
 	// Check if it's a BNDL archive
-	auto magic = reader.ReadString(4);
-	if (magic == std::string("bndl"))
-		m_impl = std::make_unique<Formats::Bndl>();
-	else if (magic == std::string("bnd2"))
-		m_impl = std::make_unique<Formats::Bnd2>();
-	else
+	m_impl = MakeBundleImplementation(reader.ReadString(4));
+	if (!m_impl)
 		return false;
 
 	return m_impl->Load(reader);
@@ -87,6 +112,20 @@ bool Bundle::Save(const std::string &name)
 	f.close();
 
 	return true;
+}
+
+std::vector<uint8_t> Bundle::SaveToMemory()
+{
+	if (!m_impl)
+		return {};
+
+	auto writer = binaryio::BinaryWriter();
+	if (!m_impl->Save(writer))
+		return {};
+
+	const auto stream = writer.GetStream();
+	const auto view = stream.view();
+	return std::vector<uint8_t>(view.begin(), view.end());
 }
 
 Magic Bundle::GetMagic() const
@@ -193,7 +232,68 @@ std::string Bundle::GetStreamName(uint8_t index) const
 	return m_impl->GetStreamName(index);
 }
 
+bool Bundle::SetDefaultResource(ResourceID resourceID, int32_t streamIndex)
+{
+	if (!m_impl || streamIndex < 0 || streamIndex > std::numeric_limits<uint8_t>::max())
+		return false;
+
+	return m_impl->SetDefaultResource({ resourceID, static_cast<uint8_t>(streamIndex) });
+}
+
+bool Bundle::SetStreamName(uint8_t index, std::string_view name)
+{
+	if (!m_impl)
+		return false;
+
+	return m_impl->SetStreamName(index, std::string(name));
+}
+
 std::vector<MemoryType> Bundle::GetMemoryTypes() const
 {
 	return m_impl->GetMemoryTypes();
+}
+
+std::vector<ResourceDescriptor> Bundle::DescribeResources() const
+{
+	if (!m_impl)
+		return {};
+
+	std::set<ResourceID> uniqueIDs;
+	for (const auto &resourceID : GetResourceIDs())
+		uniqueIDs.insert(resourceID);
+
+	std::vector<ResourceDescriptor> resources;
+	for (const auto &resourceID : uniqueIDs)
+	{
+		for (const auto streamIndex : GetResourceStreamIndices(resourceID))
+		{
+			const auto resource = GetResource(resourceID, streamIndex);
+			if (!resource)
+				continue;
+
+			ResourceDescriptor descriptor;
+			descriptor.resourceID = resourceID;
+			descriptor.streamIndex = streamIndex;
+			descriptor.resourceType = resource->GetResourceType();
+			descriptor.debugData = GetResourceDebugData(resourceID, streamIndex);
+			descriptor.imports = resource->GetImports();
+
+			for (const auto &memoryType : GetMemoryTypes())
+			{
+				const auto &buffer = resource->GetBinary(memoryType);
+				if (buffer == nullptr)
+					continue;
+
+				descriptor.memoryBlocks.push_back({ memoryType, buffer.GetSize(), buffer.GetAlignment() });
+			}
+
+			resources.emplace_back(std::move(descriptor));
+		}
+	}
+
+	std::sort(resources.begin(), resources.end(), [](const auto &lhs, const auto &rhs) {
+		return std::tie(lhs.resourceType, lhs.resourceID, lhs.streamIndex) < std::tie(rhs.resourceType, rhs.resourceID, rhs.streamIndex);
+	});
+
+	return resources;
 }

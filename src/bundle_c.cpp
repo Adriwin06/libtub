@@ -1,190 +1,190 @@
 // The secure alternatives are non-standard - but the non-secure standard ones can still be used securely.
 #define _CRT_SECURE_NO_WARNINGS
 
-#include <libbndl/bundle.h>
+#include <libtub/bundle.h>
 #include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <new>
 
-using namespace libbndl;
+using namespace libtub;
 
-struct libbndl_bundle : public Bundle
+struct libtub_bundle : public Bundle
 {
 	using Bundle::Bundle;
 };
 
-libbndl_error libbndl_load(libbndl_bundle *LIBBNDL_NULLABLE *LIBBNDL_NONNULL bundle, const char *LIBBNDL_NONNULL path)
+libtub_error libtub_load(libtub_bundle *LIBTUB_NULLABLE *LIBTUB_NONNULL bundle, const char *LIBTUB_NONNULL path)
 {
 	assert(bundle != nullptr);
 	assert(path != nullptr);
 
-	*bundle = new (std::nothrow) libbndl_bundle;
+	*bundle = new (std::nothrow) libtub_bundle;
 	if (*bundle == nullptr)
-		return LIBBNDL_ERROR_MEMORY_ALLOCATION;
+		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
 	if (!(*bundle)->Load(path))
 	{
 		delete *bundle;
-		return LIBBNDL_ERROR_INVALID_BUNDLE;
+		return LIBTUB_ERROR_INVALID_BUNDLE;
 	}
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-libbndl_error libbndl_create(libbndl_bundle *LIBBNDL_NULLABLE *LIBBNDL_NONNULL bundle, libbndl_magic magic, uint16_t version, libbndl_platform platform, libbndl_flags flags)
+libtub_error libtub_create(libtub_bundle *LIBTUB_NULLABLE *LIBTUB_NONNULL bundle, libtub_magic magic, uint16_t version, libtub_platform platform, libtub_flags flags)
 {
 	assert(bundle != nullptr);
-	assert(magic == LIBBNDL_MAGIC_BNDL || magic == LIBBNDL_MAGIC_BND2);
+	assert(magic == LIBTUB_MAGIC_BNDL || magic == LIBTUB_MAGIC_BND2);
 
-	*bundle = new (std::nothrow) libbndl_bundle(static_cast<Magic>(magic), version, static_cast<Platform>(platform), Flags(flags));
+	*bundle = new (std::nothrow) libtub_bundle(static_cast<Magic>(magic), version, static_cast<Platform>(platform), Flags(flags));
 	if (*bundle == nullptr)
-		return LIBBNDL_ERROR_MEMORY_ALLOCATION;
+		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-void libbndl_free(libbndl_bundle *LIBBNDL_NULLABLE bundle)
+void libtub_free(libtub_bundle *LIBTUB_NULLABLE bundle)
 {
 	delete bundle;
 }
 
-libbndl_error libbndl_save(libbndl_bundle *LIBBNDL_NONNULL bundle, const char *LIBBNDL_NONNULL path)
+libtub_error libtub_save(libtub_bundle *LIBTUB_NONNULL bundle, const char *LIBTUB_NONNULL path)
 {
 	if (!bundle->Save(path))
-		return LIBBNDL_ERROR_GENERIC_FAILURE;
+		return LIBTUB_ERROR_GENERIC_FAILURE;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-libbndl_magic libbndl_get_magic(const libbndl_bundle *LIBBNDL_NONNULL bundle)
+libtub_magic libtub_get_magic(const libtub_bundle *LIBTUB_NONNULL bundle)
 {
-	return static_cast<libbndl_magic>(bundle->GetMagic());
+	return static_cast<libtub_magic>(bundle->GetMagic());
 }
 
-uint16_t libbndl_get_version(const libbndl_bundle *LIBBNDL_NONNULL bundle)
+uint16_t libtub_get_version(const libtub_bundle *LIBTUB_NONNULL bundle)
 {
 	return bundle->GetVersion();
 }
 
-libbndl_platform libbndl_get_platform(const libbndl_bundle *LIBBNDL_NONNULL bundle)
+libtub_platform libtub_get_platform(const libtub_bundle *LIBTUB_NONNULL bundle)
 {
-	return static_cast<libbndl_platform>(bundle->GetPlatform());
+	return static_cast<libtub_platform>(bundle->GetPlatform());
 }
 
-libbndl_flags libbndl_get_flags(const libbndl_bundle *LIBBNDL_NONNULL bundle)
+libtub_flags libtub_get_flags(const libtub_bundle *LIBTUB_NONNULL bundle)
 {
-	return static_cast<libbndl_flags>(bundle->GetFlags());
+	return static_cast<libtub_flags>(bundle->GetFlags());
 }
 
-bool libbndl_is_burnout_era(const libbndl_bundle *LIBBNDL_NONNULL bundle)
+bool libtub_is_burnout_era(const libtub_bundle *LIBTUB_NONNULL bundle)
 {
 	return bundle->IsBurnoutEra();
 }
 
-bool libbndl_is_need_for_speed_era(const libbndl_bundle *LIBBNDL_NONNULL bundle)
+bool libtub_is_need_for_speed_era(const libtub_bundle *LIBTUB_NONNULL bundle)
 {
 	return bundle->IsNeedForSpeedEra();
 }
 
 
 /* Resource ID */
-libbndl_resource_id libbndl_resource_id_from_name(const char *LIBBNDL_NONNULL name)
+libtub_resource_id libtub_resource_id_from_name(const char *LIBTUB_NONNULL name)
 {
-	return static_cast<libbndl_resource_id>(ResourceID(name));
+	return static_cast<libtub_resource_id>(ResourceID(name));
 }
 
-libbndl_resource_id libbndl_resource_id_from_game_changer(uint32_t id, uint16_t resourceType, uint8_t index)
+libtub_resource_id libtub_resource_id_from_game_changer(uint32_t id, uint16_t resourceType, uint8_t index)
 {
-	return static_cast<libbndl_resource_id>(ResourceID(id, resourceType, index, ResourceID::IDType::GameChanger));
+	return static_cast<libtub_resource_id>(ResourceID(id, resourceType, index, ResourceID::IDType::GameChanger));
 }
 
-libbndl_resource_id libbndl_resource_id_from_components(uint32_t id, uint16_t resourceType, uint8_t index, libbndl_resource_id_type idType)
+libtub_resource_id libtub_resource_id_from_components(uint32_t id, uint16_t resourceType, uint8_t index, libtub_resource_id_type idType)
 {
-	return static_cast<libbndl_resource_id>(ResourceID(id, resourceType, index, static_cast<ResourceID::IDType>(idType)));
+	return static_cast<libtub_resource_id>(ResourceID(id, resourceType, index, static_cast<ResourceID::IDType>(idType)));
 }
 
-uint32_t libbndl_resource_id_get_game_changer_id(libbndl_resource_id resourceID)
+uint32_t libtub_resource_id_get_game_changer_id(libtub_resource_id resourceID)
 {
 	return ResourceID(resourceID).GetGameChangerID();
 }
 
-uint16_t libbndl_resource_id_get_resource_type_id(libbndl_resource_id resourceID)
+uint16_t libtub_resource_id_get_resource_type_id(libtub_resource_id resourceID)
 {
 	return ResourceID(resourceID).GetResourceTypeID();
 }
 
-uint8_t libbndl_resource_id_get_index(libbndl_resource_id resourceID)
+uint8_t libtub_resource_id_get_index(libtub_resource_id resourceID)
 {
 	return ResourceID(resourceID).GetIndex();
 }
 
-libbndl_resource_id_type libbndl_resource_id_get_id_type(libbndl_resource_id resourceID)
+libtub_resource_id_type libtub_resource_id_get_id_type(libtub_resource_id resourceID)
 {
-	return static_cast<libbndl_resource_id_type>(ResourceID(resourceID).GetIDType());
+	return static_cast<libtub_resource_id_type>(ResourceID(resourceID).GetIDType());
 }
 
 
 /* Resource debug data */
-struct libbndl_resource_debug_data : public ResourceDebugData
+struct libtub_resource_debug_data : public ResourceDebugData
 {
 	using ResourceDebugData::ResourceDebugData;
-	constexpr libbndl_resource_debug_data(ResourceDebugData &&debugData) : ResourceDebugData(std::move(debugData)) {}
+	constexpr libtub_resource_debug_data(ResourceDebugData &&debugData) : ResourceDebugData(std::move(debugData)) {}
 };
 
-libbndl_error libbndl_get_resource_debug_data(const libbndl_bundle *LIBBNDL_NONNULL bundle, libbndl_resource_debug_data *LIBBNDL_NULLABLE *LIBBNDL_NONNULL debugData, libbndl_resource_id resourceID, uint8_t streamIndex)
+libtub_error libtub_get_resource_debug_data(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_debug_data *LIBTUB_NULLABLE *LIBTUB_NONNULL debugData, libtub_resource_id resourceID, uint8_t streamIndex)
 {
 	assert(debugData != nullptr);
 
 	auto internalDebugData = bundle->GetResourceDebugData(ResourceID(resourceID), streamIndex);
 	if (!internalDebugData)
-		return LIBBNDL_ERROR_DEBUG_DATA_NOT_FOUND;
+		return LIBTUB_ERROR_DEBUG_DATA_NOT_FOUND;
 
-	*debugData = new (std::nothrow) libbndl_resource_debug_data(*std::move(internalDebugData));
+	*debugData = new (std::nothrow) libtub_resource_debug_data(*std::move(internalDebugData));
 	if (*debugData == nullptr)
-		return LIBBNDL_ERROR_MEMORY_ALLOCATION;
+		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-libbndl_error libbndl_resource_debug_data_create(libbndl_resource_debug_data *LIBBNDL_NULLABLE *LIBBNDL_NONNULL debugData, const char *LIBBNDL_NONNULL name, const char *LIBBNDL_NONNULL typeName)
+libtub_error libtub_resource_debug_data_create(libtub_resource_debug_data *LIBTUB_NULLABLE *LIBTUB_NONNULL debugData, const char *LIBTUB_NONNULL name, const char *LIBTUB_NONNULL typeName)
 {
 	assert(name != nullptr);
 	assert(typeName != nullptr);
 
-	*debugData = new (std::nothrow) libbndl_resource_debug_data(name, typeName);
+	*debugData = new (std::nothrow) libtub_resource_debug_data(name, typeName);
 	if (*debugData == nullptr)
-		return LIBBNDL_ERROR_MEMORY_ALLOCATION;
+		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-void libbndl_resource_debug_data_free(libbndl_resource_debug_data *LIBBNDL_NULLABLE debugData)
+void libtub_resource_debug_data_free(libtub_resource_debug_data *LIBTUB_NULLABLE debugData)
 {
 	delete debugData;
 }
 
-libbndl_error libbndl_resource_debug_data_get_name(const libbndl_resource_debug_data *LIBBNDL_NONNULL debugData, char *LIBBNDL_NONNULL buffer, size_t length)
+libtub_error libtub_resource_debug_data_get_name(const libtub_resource_debug_data *LIBTUB_NONNULL debugData, char *LIBTUB_NONNULL buffer, size_t length)
 {
 	const auto name = debugData->GetName();
 
 	std::strncpy(buffer, name.c_str(), length);
 	buffer[length - 1] = '\0';
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-libbndl_error libbndl_resource_debug_data_get_type_name(const libbndl_resource_debug_data *LIBBNDL_NONNULL debugData, char *LIBBNDL_NONNULL buffer, size_t length)
+libtub_error libtub_resource_debug_data_get_type_name(const libtub_resource_debug_data *LIBTUB_NONNULL debugData, char *LIBTUB_NONNULL buffer, size_t length)
 {
 	const auto typeName = debugData->GetTypeName();
 
 	std::strncpy(buffer, typeName.c_str(), length);
 	buffer[length - 1] = '\0';
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-void libbndl_add_resource_debug_data(libbndl_bundle *LIBBNDL_NONNULL bundle, libbndl_resource_id resourceID, const libbndl_resource_debug_data *LIBBNDL_NONNULL debugData, uint8_t streamIndex)
+void libtub_add_resource_debug_data(libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_id resourceID, const libtub_resource_debug_data *LIBTUB_NONNULL debugData, uint8_t streamIndex)
 {
 	assert(debugData != nullptr);
 
@@ -193,202 +193,202 @@ void libbndl_add_resource_debug_data(libbndl_bundle *LIBBNDL_NONNULL bundle, lib
 
 
 /* Resource type */
-libbndl_error libbndl_get_resource_type(const libbndl_bundle *LIBBNDL_NONNULL bundle, libbndl_resource_type *LIBBNDL_NONNULL resourceType, libbndl_resource_id resourceID, uint8_t streamIndex)
+libtub_error libtub_get_resource_type(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_type *LIBTUB_NONNULL resourceType, libtub_resource_id resourceID, uint8_t streamIndex)
 {
 	assert(resourceType != nullptr);
 
 	const auto internalResourceType = bundle->GetResourceType(ResourceID(resourceID), streamIndex);
 	if (!internalResourceType)
-		return LIBBNDL_ERROR_RESOURCE_NOT_FOUND;
+		return LIBTUB_ERROR_RESOURCE_NOT_FOUND;
 
 	*resourceType = *internalResourceType;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
 
 /* Buffer */
-struct libbndl_buffer : public Buffer
+struct libtub_buffer : public Buffer
 {
 	using Buffer::Buffer;
-	LIBBNDL_DEFAULT_MOVE_CONSTEXPR libbndl_buffer(Buffer &&buffer) : Buffer(std::move(buffer)) {}
+	LIBTUB_DEFAULT_MOVE_CONSTEXPR libtub_buffer(Buffer &&buffer) : Buffer(std::move(buffer)) {}
 };
 
-libbndl_error libbndl_buffer_create(libbndl_buffer *LIBBNDL_NULLABLE *LIBBNDL_NONNULL buffer, const void *LIBBNDL_NONNULL data, size_t size, uint32_t alignment)
+libtub_error libtub_buffer_create(libtub_buffer *LIBTUB_NULLABLE *LIBTUB_NONNULL buffer, const void *LIBTUB_NONNULL data, size_t size, uint32_t alignment)
 {
 	auto internalPtr = new (std::nothrow) uint8_t[size];
 	if (internalPtr == nullptr)
-		return LIBBNDL_ERROR_MEMORY_ALLOCATION;
+		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
 	std::memcpy(internalPtr, data, size);
 
 	std::unique_ptr<uint8_t[]> internalData(internalPtr);
 
-	*buffer = new (std::nothrow) libbndl_buffer(std::move(internalData), size, alignment);
+	*buffer = new (std::nothrow) libtub_buffer(std::move(internalData), size, alignment);
 	if (*buffer == nullptr)
-		return LIBBNDL_ERROR_MEMORY_ALLOCATION;
+		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-void libbndl_buffer_free(libbndl_buffer *LIBBNDL_NULLABLE buffer)
+void libtub_buffer_free(libtub_buffer *LIBTUB_NULLABLE buffer)
 {
 	delete buffer;
 }
 
-libbndl_error libbndl_copy_binary(const libbndl_bundle *LIBBNDL_NONNULL bundle, libbndl_buffer *LIBBNDL_NULLABLE *LIBBNDL_NONNULL buffer, libbndl_resource_id resourceID, libbndl_memory_type memoryType, uint8_t streamIndex)
+libtub_error libtub_copy_binary(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_buffer *LIBTUB_NULLABLE *LIBTUB_NONNULL buffer, libtub_resource_id resourceID, libtub_memory_type memoryType, uint8_t streamIndex)
 {
 	assert(buffer != nullptr);
 
 	// TODO: consider handling errors better here.
 
 	auto binary = bundle->GetBinary(ResourceID(resourceID), static_cast<MemoryType>(memoryType), streamIndex);
-	*buffer = new libbndl_buffer(std::move(binary));
+	*buffer = new libtub_buffer(std::move(binary));
 	if (*buffer == nullptr)
-		return LIBBNDL_ERROR_MEMORY_ALLOCATION;
+		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-void *libbndl_buffer_get_data(const libbndl_buffer *LIBBNDL_NONNULL buffer)
+void *libtub_buffer_get_data(const libtub_buffer *LIBTUB_NONNULL buffer)
 {
 	return buffer->GetData();
 }
 
-size_t libbndl_buffer_get_size(const libbndl_buffer *LIBBNDL_NONNULL buffer)
+size_t libtub_buffer_get_size(const libtub_buffer *LIBTUB_NONNULL buffer)
 {
 	return buffer->GetSize();
 }
 
-uint32_t libbndl_buffer_get_alignment(const libbndl_buffer *LIBBNDL_NONNULL buffer)
+uint32_t libtub_buffer_get_alignment(const libtub_buffer *LIBTUB_NONNULL buffer)
 {
 	return buffer->GetAlignment();
 }
 
 
 /* Import */
-struct libbndl_import : public Import
+struct libtub_import : public Import
 {
 	using Import::Import;
-	constexpr libbndl_import(Import &&import) : Import(std::move(import)) {}
+	constexpr libtub_import(Import &&import) : Import(std::move(import)) {}
 };
 
-libbndl_error libbndl_import_create(libbndl_import *LIBBNDL_NULLABLE *LIBBNDL_NONNULL import, libbndl_resource_id resourceID, uint32_t offset, libbndl_import_type importType)
+libtub_error libtub_import_create(libtub_import *LIBTUB_NULLABLE *LIBTUB_NONNULL import, libtub_resource_id resourceID, uint32_t offset, libtub_import_type importType)
 {
-	*import = new (std::nothrow) libbndl_import(ResourceID(resourceID), offset, static_cast<Import::ImportType>(importType));
+	*import = new (std::nothrow) libtub_import(ResourceID(resourceID), offset, static_cast<Import::ImportType>(importType));
 	if (*import == nullptr)
-		return LIBBNDL_ERROR_MEMORY_ALLOCATION;
+		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-void libbndl_import_free(libbndl_import *LIBBNDL_NULLABLE import)
+void libtub_import_free(libtub_import *LIBTUB_NULLABLE import)
 {
 	delete import;
 }
 
-libbndl_resource_id libbndl_import_get_resource_id(const libbndl_import *LIBBNDL_NONNULL import)
+libtub_resource_id libtub_import_get_resource_id(const libtub_import *LIBTUB_NONNULL import)
 {
-	return static_cast<libbndl_resource_id>(import->GetResourceID());
+	return static_cast<libtub_resource_id>(import->GetResourceID());
 }
 
-uint32_t libbndl_import_get_offset(const libbndl_import *LIBBNDL_NONNULL import)
+uint32_t libtub_import_get_offset(const libtub_import *LIBTUB_NONNULL import)
 {
 	return import->GetOffset();
 }
 
-libbndl_import_type libbndl_import_get_import_type(const libbndl_import *LIBBNDL_NONNULL import)
+libtub_import_type libtub_import_get_import_type(const libtub_import *LIBTUB_NONNULL import)
 {
-	return static_cast<libbndl_import_type>(import->GetImportType());
+	return static_cast<libtub_import_type>(import->GetImportType());
 }
 
 
 /* Resource */
-struct libbndl_resource : public Resource
+struct libtub_resource : public Resource
 {
 	using Resource::Resource;
-	LIBBNDL_DEFAULT_MOVE_CONSTEXPR libbndl_resource(Resource &&resource) : Resource(std::move(resource)) {}
+	LIBTUB_DEFAULT_MOVE_CONSTEXPR libtub_resource(Resource &&resource) : Resource(std::move(resource)) {}
 };
 
-libbndl_error libbndl_resource_create(libbndl_resource *LIBBNDL_NULLABLE *LIBBNDL_NONNULL resource, libbndl_resource_type resourceType)
+libtub_error libtub_resource_create(libtub_resource *LIBTUB_NULLABLE *LIBTUB_NONNULL resource, libtub_resource_type resourceType)
 {
-	*resource = new (std::nothrow) libbndl_resource(resourceType);
+	*resource = new (std::nothrow) libtub_resource(resourceType);
 	if (*resource == nullptr)
-		return LIBBNDL_ERROR_MEMORY_ALLOCATION;
+		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-void libbndl_resource_free(libbndl_resource *LIBBNDL_NULLABLE resource)
+void libtub_resource_free(libtub_resource *LIBTUB_NULLABLE resource)
 {
 	delete resource;
 }
 
-libbndl_error libbndl_copy_resource(const libbndl_bundle *LIBBNDL_NONNULL bundle, libbndl_resource *LIBBNDL_NULLABLE *LIBBNDL_NONNULL resource, libbndl_resource_id resourceID, uint8_t streamIndex)
+libtub_error libtub_copy_resource(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource *LIBTUB_NULLABLE *LIBTUB_NONNULL resource, libtub_resource_id resourceID, uint8_t streamIndex)
 {
 	assert(resource != nullptr);
 
 	auto internalResource = bundle->GetResource(ResourceID(resourceID), streamIndex);
 	if (!internalResource)
-		return LIBBNDL_ERROR_RESOURCE_NOT_FOUND;
+		return LIBTUB_ERROR_RESOURCE_NOT_FOUND;
 
-	*resource = new (std::nothrow) libbndl_resource(*std::move(internalResource));
+	*resource = new (std::nothrow) libtub_resource(*std::move(internalResource));
 	if (*resource == nullptr)
-		return LIBBNDL_ERROR_MEMORY_ALLOCATION;
+		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-libbndl_error libbndl_resource_get_binary_mut(libbndl_resource *LIBBNDL_NONNULL resource, libbndl_buffer *LIBBNDL_NULLABLE *LIBBNDL_NONNULL buffer, libbndl_memory_type memoryType)
+libtub_error libtub_resource_get_binary_mut(libtub_resource *LIBTUB_NONNULL resource, libtub_buffer *LIBTUB_NULLABLE *LIBTUB_NONNULL buffer, libtub_memory_type memoryType)
 {
 	assert(buffer != nullptr);
 
 	if (memoryType >= 4)
-		return LIBBNDL_ERROR_OUT_OF_RANGE;
+		return LIBTUB_ERROR_OUT_OF_RANGE;
 
-	*buffer = &reinterpret_cast<libbndl_buffer &>(resource->GetBinary(static_cast<libbndl::MemoryType>(memoryType)));
-	return LIBBNDL_ERROR_SUCCESS;
+	*buffer = &reinterpret_cast<libtub_buffer &>(resource->GetBinary(static_cast<libtub::MemoryType>(memoryType)));
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-libbndl_error libbndl_resource_get_binary_const(const libbndl_resource *LIBBNDL_NONNULL resource, const libbndl_buffer *LIBBNDL_NULLABLE *LIBBNDL_NONNULL buffer, libbndl_memory_type memoryType)
+libtub_error libtub_resource_get_binary_const(const libtub_resource *LIBTUB_NONNULL resource, const libtub_buffer *LIBTUB_NULLABLE *LIBTUB_NONNULL buffer, libtub_memory_type memoryType)
 {
 	assert(buffer != nullptr);
 
 	if (memoryType >= 4)
-		return LIBBNDL_ERROR_OUT_OF_RANGE;
+		return LIBTUB_ERROR_OUT_OF_RANGE;
 
-	*buffer = &reinterpret_cast<const libbndl_buffer &>(resource->GetBinary(static_cast<libbndl::MemoryType>(memoryType)));
-	return LIBBNDL_ERROR_SUCCESS;
+	*buffer = &reinterpret_cast<const libtub_buffer &>(resource->GetBinary(static_cast<libtub::MemoryType>(memoryType)));
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-size_t libbndl_resource_get_import_count(const libbndl_resource *LIBBNDL_NONNULL resource)
+size_t libtub_resource_get_import_count(const libtub_resource *LIBTUB_NONNULL resource)
 {
 	return resource->GetImports().size();
 }
 
-libbndl_error libbndl_resource_copy_import(const libbndl_resource *LIBBNDL_NONNULL resource, libbndl_import *LIBBNDL_NULLABLE *LIBBNDL_NONNULL import, size_t index)
+libtub_error libtub_resource_copy_import(const libtub_resource *LIBTUB_NONNULL resource, libtub_import *LIBTUB_NULLABLE *LIBTUB_NONNULL import, size_t index)
 {
 	assert(import != nullptr);
 
 	auto imports = resource->GetImports();
 	if (index >= imports.size())
-		return LIBBNDL_ERROR_OUT_OF_RANGE;
+		return LIBTUB_ERROR_OUT_OF_RANGE;
 
-	*import = new libbndl_import(std::move(imports[index]));
+	*import = new libtub_import(std::move(imports[index]));
 	if (*import == nullptr)
-		return LIBBNDL_ERROR_MEMORY_ALLOCATION;
+		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-libbndl_error libbndl_resource_replace_binary(libbndl_resource *LIBBNDL_NONNULL resource, const libbndl_buffer *LIBBNDL_NONNULL buffer, libbndl_memory_type memoryType)
+libtub_error libtub_resource_replace_binary(libtub_resource *LIBTUB_NONNULL resource, const libtub_buffer *LIBTUB_NONNULL buffer, libtub_memory_type memoryType)
 {
 	assert(buffer != nullptr);
 
 	auto size = buffer->GetSize();
 	auto newData = new (std::nothrow) uint8_t[size];
 	if (newData == nullptr)
-		return LIBBNDL_ERROR_MEMORY_ALLOCATION;
+		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
 	std::memcpy(newData, buffer->GetData(), size);
 
@@ -396,78 +396,78 @@ libbndl_error libbndl_resource_replace_binary(libbndl_resource *LIBBNDL_NONNULL 
 	Buffer newBuffer(std::move(newPtr), size, buffer->GetAlignment());
 	resource->ReplaceBinary(static_cast<MemoryType>(memoryType), std::move(newBuffer));
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-void libbndl_resource_add_import(libbndl_resource *LIBBNDL_NONNULL resource, libbndl_import *LIBBNDL_NONNULL import)
+void libtub_resource_add_import(libtub_resource *LIBTUB_NONNULL resource, libtub_import *LIBTUB_NONNULL import)
 {
 	assert(import != nullptr);
 
 	resource->AddImport(*import);
 }
 
-libbndl_error libbndl_add_resource(libbndl_bundle *LIBBNDL_NONNULL bundle, libbndl_resource_id resourceID, const libbndl_resource *LIBBNDL_NONNULL resource, uint8_t streamIndex)
+libtub_error libtub_add_resource(libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_id resourceID, const libtub_resource *LIBTUB_NONNULL resource, uint8_t streamIndex)
 {
 	assert(resource != nullptr);
 
 	if (!bundle->AddResource(ResourceID(resourceID), *resource, streamIndex))
-		return LIBBNDL_ERROR_GENERIC_FAILURE;
+		return LIBTUB_ERROR_GENERIC_FAILURE;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-libbndl_error libbndl_replace_resource(libbndl_bundle *LIBBNDL_NONNULL bundle, libbndl_resource_id resourceID, const libbndl_resource *LIBBNDL_NONNULL resource, uint8_t streamIndex)
+libtub_error libtub_replace_resource(libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_id resourceID, const libtub_resource *LIBTUB_NONNULL resource, uint8_t streamIndex)
 {
 	assert(resource != nullptr);
 
 	if (!bundle->ReplaceResource(ResourceID(resourceID), *resource, streamIndex))
-		return LIBBNDL_ERROR_GENERIC_FAILURE;
+		return LIBTUB_ERROR_GENERIC_FAILURE;
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
 
 /* Bundle helpers */
-uint32_t libbndl_get_resource_count(const libbndl_bundle *LIBBNDL_NONNULL bundle)
+uint32_t libtub_get_resource_count(const libtub_bundle *LIBTUB_NONNULL bundle)
 {
 	return bundle->GetResourceCount();
 }
 
-libbndl_error libbndl_get_resource_id_at_index(const libbndl_bundle *LIBBNDL_NONNULL bundle, libbndl_resource_id *LIBBNDL_NONNULL resourceID, uint32_t index)
+libtub_error libtub_get_resource_id_at_index(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_id *LIBTUB_NONNULL resourceID, uint32_t index)
 {
 	const auto resourceIDs = bundle->GetResourceIDs();
 	if (index >= resourceIDs.size())
-		return LIBBNDL_ERROR_OUT_OF_RANGE;
+		return LIBTUB_ERROR_OUT_OF_RANGE;
 
-	*resourceID = static_cast<libbndl_resource_id>(resourceIDs[index]);
-	return LIBBNDL_ERROR_SUCCESS;
+	*resourceID = static_cast<libtub_resource_id>(resourceIDs[index]);
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-bool libbndl_is_populated_resource_stream_index(const libbndl_bundle *LIBBNDL_NONNULL bundle, libbndl_resource_id resourceID, uint8_t streamIndex)
+bool libtub_is_populated_resource_stream_index(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_id resourceID, uint8_t streamIndex)
 {
 	const auto indices = bundle->GetResourceStreamIndices(ResourceID(resourceID));
 	return std::find(indices.begin(), indices.end(), streamIndex) != indices.end();
 }
 
-libbndl_resource_id libbndl_get_default_resource_id(const libbndl_bundle *LIBBNDL_NONNULL bundle)
+libtub_resource_id libtub_get_default_resource_id(const libtub_bundle *LIBTUB_NONNULL bundle)
 {
-	return static_cast<libbndl_resource_id>(bundle->GetDefaultResourceID());
+	return static_cast<libtub_resource_id>(bundle->GetDefaultResourceID());
 }
 
-int32_t libbndl_get_default_resource_stream_index(const libbndl_bundle *LIBBNDL_NONNULL bundle)
+int32_t libtub_get_default_resource_stream_index(const libtub_bundle *LIBTUB_NONNULL bundle)
 {
 	return bundle->GetDefaultResourceStreamIndex();
 }
 
-libbndl_error libbndl_get_stream_name(const libbndl_bundle *LIBBNDL_NONNULL bundle, char *LIBBNDL_NONNULL buffer, size_t length, uint8_t streamIndex)
+libtub_error libtub_get_stream_name(const libtub_bundle *LIBTUB_NONNULL bundle, char *LIBTUB_NONNULL buffer, size_t length, uint8_t streamIndex)
 {
 	const auto streamName = bundle->GetStreamName(streamIndex);
 	std::strncpy(buffer, streamName.c_str(), length);
 
-	return LIBBNDL_ERROR_SUCCESS;
+	return LIBTUB_ERROR_SUCCESS;
 }
 
-bool libbndl_is_valid_memory_type(const libbndl_bundle *LIBBNDL_NONNULL bundle, libbndl_memory_type memoryType)
+bool libtub_is_valid_memory_type(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_memory_type memoryType)
 {
 	const auto memoryTypes = bundle->GetMemoryTypes();
 	return std::find(memoryTypes.begin(), memoryTypes.end(), static_cast<MemoryType>(memoryType)) != memoryTypes.end();

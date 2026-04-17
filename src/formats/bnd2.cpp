@@ -5,8 +5,8 @@
 #include <limits>
 #include <ranges>
 
-using namespace libbndl;
-using namespace libbndl::Formats;
+using namespace libtub;
+using namespace libtub::Formats;
 
 bool Bnd2::Load(binaryio::BinaryReader &reader)
 {
@@ -374,7 +374,7 @@ std::optional<Resource> Bnd2::GetResource(ResourceKey resourceKey) const
 
 	std::array<Buffer, 4> buffers;
 	for (const auto &memoryType : GetMemoryTypes())
-		buffers[LIBBNDL_TO_UNDERLYING(memoryType)] = GetBinary(resourceKey, memoryType);
+		buffers[LIBTUB_TO_UNDERLYING(memoryType)] = GetBinary(resourceKey, memoryType);
 
 	std::vector<Import> imports;
 	const auto numImports = it->second.importCount;
@@ -420,6 +420,26 @@ std::string Bnd2::GetStreamName(uint8_t index) const
 		return Base::GetStreamName(index);
 
 	return m_streamNames[index];
+}
+
+bool Bnd2::SetDefaultResource(ResourceKey resourceKey)
+{
+	if (m_version < 5 || !m_entries.contains(resourceKey))
+		return false;
+
+	m_defaultResourceID = resourceKey.first;
+	m_defaultResourceStreamIndex = resourceKey.second;
+	m_flags |= Flags::ContainsDefaultResource;
+	return true;
+}
+
+bool Bnd2::SetStreamName(uint8_t index, const std::string &name)
+{
+	if (m_version < 5 || index >= kStreamLimit || name.size() > 15)
+		return false;
+
+	m_streamNames[index] = name;
+	return true;
 }
 
 std::vector<MemoryType> Bnd2::GetMemoryTypes() const
@@ -562,7 +582,7 @@ std::optional<uint8_t> Bnd2::MapFileBlockToLibBlock(uint8_t block) const
 	}
 
 	if (mappedType)
-		return LIBBNDL_TO_UNDERLYING(*mappedType);
+		return LIBTUB_TO_UNDERLYING(*mappedType);
 
 	return {};
 }

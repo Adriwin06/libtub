@@ -3,7 +3,7 @@ include(GenerateExportHeader)
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
-set(HEADER_DIR ${LIBBNDL_ROOT}/include/libbndl)
+set(HEADER_DIR ${LIBTUB_ROOT}/include/libtub)
 file(GLOB_RECURSE PUBLIC_HEADERS CONFIGURE_DEPENDS
     "${HEADER_DIR}/*.hpp"
     "${HEADER_DIR}/*.h"
@@ -12,9 +12,9 @@ file(GLOB_RECURSE PUBLIC_HEADERS CONFIGURE_DEPENDS
 
 file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS "*.cpp")
 
-add_library(libbndl ${SRC_FILES})
+add_library(libtub ${SRC_FILES})
 
-target_sources(libbndl PUBLIC FILE_SET HEADERS
+target_sources(libtub PUBLIC FILE_SET HEADERS
                               BASE_DIRS "${HEADER_DIR}"
                               FILES "${PUBLIC_HEADERS}")
 set_source_files_properties(${HEADER_DIR}/bundle.h PROPERTIES LANGUAGE C
@@ -44,44 +44,60 @@ FetchContent_Declare(
     EXCLUDE_FROM_ALL
     FIND_PACKAGE_ARGS 1.11
 )
+FetchContent_Declare(
+    yaml-cpp
+    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp
+    GIT_TAG        0.8.0
+    EXCLUDE_FROM_ALL
+    FIND_PACKAGE_ARGS
+)
 
 set(ZLIB_BUILD_SHARED ${BUILD_SHARED_LIBS})
 set(ZLIB_BUILD_TESTING OFF)
-FetchContent_MakeAvailable(binaryio ZLIB pugixml)
+set(YAML_CPP_BUILD_CONTRIB OFF)
+set(YAML_CPP_BUILD_TESTS OFF)
+set(YAML_CPP_BUILD_TOOLS OFF)
+FetchContent_MakeAvailable(binaryio ZLIB pugixml yaml-cpp)
 if(NOT ZLIB_FOUND AND NOT BUILD_SHARED_LIBS)
     add_library(ZLIB::ZLIB ALIAS zlibstatic)
 endif()
 
-target_link_libraries(libbndl PRIVATE binaryio ZLIB::ZLIB)
-if(TARGET pugixml::pugixml)
-    target_link_libraries(libbndl PRIVATE pugixml::pugixml)
+target_link_libraries(libtub PRIVATE binaryio ZLIB::ZLIB)
+if(TARGET yaml-cpp::yaml-cpp)
+    target_link_libraries(libtub PRIVATE yaml-cpp::yaml-cpp)
 else()
-    target_include_directories(libbndl SYSTEM PRIVATE ${pugixml_SOURCE_DIR}/src)
-    target_compile_definitions(libbndl PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
+    target_link_libraries(libtub PRIVATE yaml-cpp)
+endif()
+if(TARGET pugixml::pugixml)
+    target_link_libraries(libtub PRIVATE pugixml::pugixml)
+else()
+    target_include_directories(libtub SYSTEM PRIVATE ${pugixml_SOURCE_DIR}/src)
+    target_compile_definitions(libtub PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
 endif()
 
-target_compile_features(libbndl PUBLIC c_std_11 cxx_std_20)
+target_compile_features(libtub PUBLIC c_std_11 cxx_std_20)
 
-set_target_properties(libbndl PROPERTIES PREFIX ""
+set_target_properties(libtub PROPERTIES PREFIX ""
                                          CXX_VISIBILITY_PRESET hidden
                                          POSITION_INDEPENDENT_CODE ON
                                          VERIFY_INTERFACE_HEADER_SETS ${PROJECT_IS_TOP_LEVEL})
 
-generate_export_header(libbndl EXPORT_FILE_NAME include/libbndl/internal/export.h)
+generate_export_header(libtub EXPORT_FILE_NAME include/libtub/internal/export.h)
 
-target_include_directories(libbndl PUBLIC ${LIBBNDL_ROOT}/include ${CMAKE_CURRENT_BINARY_DIR}/include)
+target_include_directories(libtub PUBLIC ${LIBTUB_ROOT}/include ${CMAKE_CURRENT_BINARY_DIR}/include)
 
 if(MSVC)
-    target_compile_options(libbndl PRIVATE "/W4" "/Zc:throwingNew" "/EHsc")
+    target_compile_options(libtub PRIVATE "/W4" "/Zc:throwingNew" "/EHsc")
 endif()
 
-install(TARGETS libbndl FILE_SET HEADERS)
+install(TARGETS libtub FILE_SET HEADERS)
 if(CMAKE_CXX_LINKER_SUPPORTS_PDB AND BUILD_SHARED_LIBS)
-    install(FILES $<TARGET_PDB_FILE:libbndl> TYPE BIN OPTIONAL)
+    install(FILES $<TARGET_PDB_FILE:libtub> TYPE BIN OPTIONAL)
 endif()
 
 include(GNUInstallDirs) # `TYPE DOC` behaviour changes(!) when GNUInstallDirs is included
-install(FILES ${LIBBNDL_ROOT}/LICENSE.md TYPE DOC RENAME copyright)
+install(FILES ${LIBTUB_ROOT}/LICENSE TYPE DOC RENAME copyright)
+install(FILES ${LIBTUB_ROOT}/NOTICE.libbndl.md TYPE DOC)
 
 if(NOT ZLIB_FOUND AND ZLIB_BUILD_SHARED)
     install(TARGETS zlib ARCHIVE EXCLUDE_FROM_ALL)

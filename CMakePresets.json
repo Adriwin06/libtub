@@ -19,9 +19,9 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
-        "LIBBNDL_BUILD_TOOLS": "ON",
-        "LIBBNDL_INSTALL_TOOLS": "ON",
-        "LIBBNDL_BUILD_VALIDATIONTEST": "ON"
+        "LIBTUB_BUILD_TOOLS": "ON",
+        "LIBTUB_INSTALL_TOOLS": "ON",
+        "LIBTUB_BUILD_VALIDATIONTEST": "ON"
       }
     },
     {
@@ -29,8 +29,8 @@
       "hidden": true,
       "inherits": "Qt",
       "cacheVariables": {
-        "LIBBNDL_BUILD_UI": "ON",
-        "LIBBNDL_INSTALL_UI": "ON"
+        "LIBTUB_BUILD_UI": "ON",
+        "LIBTUB_INSTALL_UI": "ON"
       }
     },
     {

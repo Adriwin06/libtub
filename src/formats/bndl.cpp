@@ -1,8 +1,8 @@
 #include "bndl.hpp"
 #include <cstring>
 
-using namespace libbndl;
-using namespace libbndl::Formats;
+using namespace libtub;
+using namespace libtub::Formats;
 
 bool Bndl::Load(binaryio::BinaryReader &reader)
 {
@@ -476,7 +476,7 @@ std::optional<uint8_t> Bndl::MapFileBlockToLibBlock(uint8_t block) const
 	}
 
 	if (mappedType)
-		return LIBBNDL_TO_UNDERLYING(*mappedType);
+		return LIBTUB_TO_UNDERLYING(*mappedType);
 
 	return {};
 }
@@ -489,7 +489,7 @@ std::optional<Resource> Bndl::GetResource(ResourceKey resourceKey) const
 
 	std::array<Buffer, 4> buffers;
 	for (const auto &memoryType : GetMemoryTypes())
-		buffers[LIBBNDL_TO_UNDERLYING(memoryType)] = GetBinary(resourceKey, memoryType);
+		buffers[LIBTUB_TO_UNDERLYING(memoryType)] = GetBinary(resourceKey, memoryType);
 
 	std::vector<Import> imports;
 	if (it->second.importCount > 0)

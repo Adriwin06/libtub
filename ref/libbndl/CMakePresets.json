@@ -1,0 +1,419 @@
+{
+  "version": 9,
+  "configurePresets": [
+    {
+      "hidden": true,
+      "name": "Qt",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{QTDIR}"
+      },
+      "vendor": {
+        "qt-project.org/Qt": {
+          "checksum": "wVa86FgEkvdCTVp1/nxvrkaemJc="
+        }
+      }
+    },
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "LIBBNDL_BUILD_TOOLS": "ON"
+      }
+    },
+    {
+      "name": "ui",
+      "hidden": true,
+      "inherits": "Qt",
+      "cacheVariables": {
+        "LIBBNDL_BUILD_UI": "ON",
+        "LIBBNDL_INSTALL_UI": "ON"
+      }
+    },
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl.exe",
+        "CMAKE_CXX_COMPILER": "cl.exe"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "unix-base",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Unix Makefiles",
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "x64-debug",
+      "hidden": true,
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "x64-debug-windows",
+      "displayName": "x64 Debug",
+      "inherits": [
+        "x64-debug",
+        "windows-base"
+      ]
+    },
+    {
+      "name": "x64-debug-unix",
+      "displayName": "x64 Debug",
+      "inherits": [
+        "x64-debug",
+        "unix-base"
+      ]
+    },
+    {
+      "name": "x64-debug-windows-ui",
+      "displayName": "x64 Debug (UI)",
+      "inherits": [
+        "x64-debug-windows",
+        "ui"
+      ]
+    },
+    {
+      "name": "x64-debug-unix-ui",
+      "displayName": "x64 Debug (UI)",
+      "inherits": [
+        "x64-debug-unix",
+        "ui"
+      ]
+    },
+    {
+      "name": "x64-release",
+      "hidden": true,
+      "inherits": "x64-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "x64-release-windows",
+      "displayName": "x64 Release",
+      "inherits": [
+        "x64-release",
+        "windows-base"
+      ]
+    },
+    {
+      "name": "x64-release-unix",
+      "displayName": "x64 Release",
+      "inherits": [
+        "x64-release",
+        "unix-base"
+      ]
+    },
+    {
+      "name": "x64-release-windows-ui",
+      "displayName": "x64 Release (UI)",
+      "inherits": [
+        "x64-release-windows",
+        "ui"
+      ]
+    },
+    {
+      "name": "x64-release-unix-ui",
+      "displayName": "x64 Release (UI)",
+      "inherits": [
+        "x64-release-unix",
+        "ui"
+      ]
+    },
+    {
+      "name": "x86-debug",
+      "hidden": true,
+      "architecture": {
+        "value": "x86",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "x86-debug-windows",
+      "displayName": "x86 Debug",
+      "inherits": [
+        "x86-debug",
+        "windows-base"
+      ]
+    },
+    {
+      "name": "x86-debug-unix",
+      "displayName": "x86 Debug",
+      "inherits": [
+        "x86-debug",
+        "unix-base"
+      ]
+    },
+    {
+      "name": "x86-debug-windows-ui",
+      "displayName": "x86 Debug (UI)",
+      "inherits": [
+        "x86-debug-windows",
+        "ui"
+      ]
+    },
+    {
+      "name": "x86-debug-unix-ui",
+      "displayName": "x86 Debug (UI)",
+      "inherits": [
+        "x86-debug-unix",
+        "ui"
+      ]
+    },
+    {
+      "name": "x86-release",
+      "hidden": true,
+      "inherits": "x86-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "x86-release-windows",
+      "displayName": "x86 Release",
+      "inherits": [
+        "x86-release",
+        "windows-base"
+      ]
+    },
+    {
+      "name": "x86-release-unix",
+      "displayName": "x86 Debug",
+      "inherits": [
+        "x86-release",
+        "unix-base"
+      ]
+    },
+    {
+      "name": "x86-release-windows-ui",
+      "displayName": "x86 Release (UI)",
+      "inherits": [
+        "x86-release-windows",
+        "ui"
+      ]
+    },
+    {
+      "name": "x86-release-unix-ui",
+      "displayName": "x86 Release (UI)",
+      "inherits": [
+        "x86-release-unix",
+        "ui"
+      ]
+    },
+    {
+      "name": "arm64-debug",
+      "hidden": true,
+      "architecture": {
+        "value": "arm64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "arm64-debug-windows",
+      "displayName": "arm64 Debug",
+      "inherits": [
+        "arm64-debug",
+        "windows-base"
+      ]
+    },
+    {
+      "name": "arm64-debug-unix",
+      "displayName": "arm64 Debug",
+      "inherits": [
+        "arm64-debug",
+        "unix-base"
+      ]
+    },
+    {
+      "name": "arm64-debug-windows-ui",
+      "displayName": "arm64 Debug (UI)",
+      "inherits": [
+        "arm64-debug-windows",
+        "ui"
+      ]
+    },
+    {
+      "name": "arm64-debug-unix-ui",
+      "displayName": "arm64 Debug (UI)",
+      "inherits": [
+        "arm64-debug-unix",
+        "ui"
+      ]
+    },
+    {
+      "name": "arm64-release",
+      "hidden": true,
+      "inherits": "arm64-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "arm64-release-windows",
+      "displayName": "arm64 Release",
+      "inherits": [
+        "arm64-release",
+        "windows-base"
+      ]
+    },
+    {
+      "name": "arm64-release-unix",
+      "displayName": "arm64 Release",
+      "inherits": [
+        "arm64-release",
+        "unix-base"
+      ]
+    },
+    {
+      "name": "arm64-release-windows-ui",
+      "displayName": "arm64 Release (UI)",
+      "inherits": [
+        "arm64-release-windows",
+        "ui"
+      ]
+    },
+    {
+      "name": "arm64-release-unix-ui",
+      "displayName": "arm64 Release (UI)",
+      "inherits": [
+        "arm64-release-unix",
+        "ui"
+      ]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "unix-base",
+      "hidden": true,
+      "inherits": "base",
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "x64-debug-windows",
+      "displayName": "x64 Debug",
+      "inherits": "windows-base",
+      "configurePreset": "x64-debug-windows"
+    },
+    {
+      "name": "x64-debug-unix",
+      "displayName": "x64 Debug",
+      "inherits": "unix-base",
+      "configurePreset": "x64-debug-unix"
+    },
+    {
+      "name": "x64-release-windows",
+      "displayName": "x64 Release",
+      "inherits": "windows-base",
+      "configurePreset": "x64-release-windows"
+    },
+    {
+      "name": "x64-release-unix",
+      "displayName": "x64 Release",
+      "inherits": "unix-base",
+      "configurePreset": "x64-release-unix"
+    },
+    {
+      "name": "x86-debug-windows",
+      "displayName": "x86 Debug",
+      "inherits": "windows-base",
+      "configurePreset": "x86-debug-windows"
+    },
+    {
+      "name": "x86-debug-unix",
+      "displayName": "x86 Debug",
+      "inherits": "unix-base",
+      "configurePreset": "x86-debug-unix"
+    },
+    {
+      "name": "x86-release-windows",
+      "displayName": "x86 Release",
+      "inherits": "windows-base",
+      "configurePreset": "x86-release-windows"
+    },
+    {
+      "name": "x86-release-unix",
+      "displayName": "x86 Release",
+      "inherits": "unix-base",
+      "configurePreset": "x86-release-unix"
+    },
+    {
+      "name": "arm64-debug-windows",
+      "displayName": "arm64 Debug",
+      "inherits": "windows-base",
+      "configurePreset": "arm64-debug-windows"
+    },
+    {
+      "name": "arm64-debug-unix",
+      "displayName": "arm64 Debug",
+      "inherits": "unix-base",
+      "configurePreset": "arm64-debug-unix"
+    },
+    {
+      "name": "arm64-release-windows",
+      "displayName": "arm64 Release",
+      "inherits": "windows-base",
+      "configurePreset": "arm64-release-windows"
+    },
+    {
+      "name": "arm64-release-unix",
+      "displayName": "arm64 Release",
+      "inherits": "unix-base",
+      "configurePreset": "arm64-release-unix"
+    }
+  ],
+  "vendor": {
+    "qt-project.org/Presets": {
+      "checksum": "ED8ghO2QXNMoIF8tuI4U/Rt6tJw="
+    }
+  }
+}

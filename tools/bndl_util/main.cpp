@@ -1,4 +1,4 @@
-#include <libbndl/bundle.hpp>
+#include <libtub/bundle.hpp>
 #include <cctype>
 #include <filesystem>
 #include <format>
@@ -10,7 +10,7 @@
 #include <pugixml.hpp>
 #include "types.hpp"
 
-using namespace libbndl;
+using namespace libtub;
 
 static std::string cleanResourceNameForHash(const std::string &resourceName)
 {

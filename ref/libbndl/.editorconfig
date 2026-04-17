@@ -1,0 +1,15 @@
+root = true
+
+[*]
+indent_style = tab
+tab_width = 4
+insert_final_newline = true
+
+[{CMakeLists.txt,*.cmake}]
+indent_style = space
+
+# Qt VS Tools always overrides this...
+[{CMakePresets.json,CMakeUserPresets.json}]
+indent_style = space
+indent_size = 2
+insert_final_newline = false
