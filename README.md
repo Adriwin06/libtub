@@ -90,5 +90,4 @@ int main()
 ## Notes
 
 - `ref/` is kept as reference material only. `libtub`'s actual source lives in the repo root `include/`, `src/`, and `tools/`.
-- The upstream `libbndl` MIT license is preserved in [NOTICE.libbndl.md](NOTICE.libbndl.md).
 - The bundle editor/utility tool sources are still present behind CMake options, but the core deliverable here is the reusable C++ library.
