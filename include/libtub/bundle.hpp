@@ -1,5 +1,5 @@
 #pragma once
-#include <libbndl/internal/export.h>
+#include <libtub/internal/export.h>
 #include <array>
 #include <filesystem>
 #include <map>
@@ -29,14 +29,14 @@ namespace libbndl
 	enum class Magic : uint8_t
 	{
 #define LIBBNDL_ENUM_MAGIC(name, _, value) name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_MAGIC
 	};
 
 	enum class Platform : uint16_t
 	{
 #define LIBBNDL_ENUM_PLATFORM(name, _, value) name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_PLATFORM
 	};
 
@@ -47,7 +47,7 @@ namespace libbndl
 			enum : uint32_t
 			{
 #define LIBBNDL_ENUM_RESOURCE_TYPE_BURNOUT(name, _, value) name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_RESOURCE_TYPE_BURNOUT
 			};
 		}
@@ -57,7 +57,7 @@ namespace libbndl
 			enum : uint32_t
 			{
 #define LIBBNDL_ENUM_RESOURCE_TYPE_NFS(name, _, value) name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_RESOURCE_TYPE_NFS
 			};
 		}
@@ -66,7 +66,7 @@ namespace libbndl
 	enum class MemoryType : uint8_t
 	{
 #define LIBBNDL_ENUM_MEMORY_TYPE(name, _, value) name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_MEMORY_TYPE
 	};
 
@@ -77,7 +77,7 @@ namespace libbndl
 		enum class Values : UnderlyingType
 		{
 #define LIBBNDL_ENUM_FLAGS(name, _, value) name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_FLAGS
 		};
 
@@ -137,7 +137,7 @@ namespace libbndl
 		enum class IDType : uint8_t
 		{
 #define LIBBNDL_ENUM_ID_TYPE(name, _, value) name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_ID_TYPE
 		};
 
@@ -183,7 +183,7 @@ namespace libbndl
 		enum class ImportType : uint8_t
 		{
 #define LIBBNDL_ENUM_IMPORT_TYPE(name, _, value) name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_IMPORT_TYPE
 		};
 

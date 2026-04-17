@@ -1,9 +1,9 @@
 #pragma once
 #ifdef __cplusplus
-#include <libbndl/bundle.hpp>
+#include <libtub/bundle.hpp>
 #endif
 #ifndef LIBBNDL_EXPORT
-#include <libbndl/internal/export.h>
+#include <libtub/internal/export.h>
 #endif
 #include <stdbool.h>
 #include <stdint.h>
@@ -44,7 +44,7 @@ extern "C"
 
 	enum {
 #define LIBBNDL_ENUM_MAGIC(_, name, value) LIBBNDL_MAGIC_##name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_MAGIC
 	};
 	typedef uint8_t libbndl_magic;
@@ -52,7 +52,7 @@ extern "C"
 	enum
 	{
 #define LIBBNDL_ENUM_PLATFORM(_, name, value) LIBBNDL_PLATFORM_##name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_PLATFORM
 	};
 	typedef uint16_t libbndl_platform;
@@ -60,7 +60,7 @@ extern "C"
 	enum
 	{
 #define LIBBNDL_ENUM_FLAGS(_, name, value) LIBBNDL_FLAGS_##name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_FLAGS
 	};
 	typedef uint32_t libbndl_flags;
@@ -87,7 +87,7 @@ extern "C"
 	enum
 	{
 #define LIBBNDL_ENUM_ID_TYPE(_, name, value) LIBBNDL_RESOURCE_ID_TYPE_##name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_ID_TYPE
 	};
 	typedef uint8_t libbndl_resource_id_type;
@@ -121,13 +121,13 @@ extern "C"
 	enum
 	{
 #define LIBBNDL_ENUM_RESOURCE_TYPE_BURNOUT(_, name, value) LIBBNDL_RESOURCE_TYPE_BURNOUT_##name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_RESOURCE_TYPE_BURNOUT
 	};
 	enum
 	{
 #define LIBBNDL_ENUM_RESOURCE_TYPE_NFS(_, name, value) LIBBNDL_RESOURCE_TYPE_NFS_##name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_RESOURCE_TYPE_NFS
 	};
 	typedef uint32_t libbndl_resource_type;
@@ -141,7 +141,7 @@ extern "C"
 	enum
 	{
 #define LIBBNDL_ENUM_MEMORY_TYPE(_, name, value) LIBBNDL_MEMORY_TYPE_##name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_MEMORY_TYPE
 	};
 	typedef uint8_t libbndl_memory_type;
@@ -162,7 +162,7 @@ extern "C"
 	enum
 	{
 #define LIBBNDL_ENUM_IMPORT_TYPE(_, name, value) LIBBNDL_IMPORT_TYPE_##name = (value),
-#include <libbndl/internal/enum.inc>
+#include <libtub/internal/enum.inc>
 #undef LIBBNDL_ENUM_IMPORT_TYPE
 	};
 	typedef uint8_t libbndl_import_type;

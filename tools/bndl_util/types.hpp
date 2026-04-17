@@ -1,5 +1,5 @@
 #pragma once
-#include <libbndl/bundle.hpp>
+#include <libtub/bundle.hpp>
 
 const std::map<uint32_t, std::string> g_burnoutFileTypeNames = {
 	{ libbndl::ResourceType::Burnout::Texture, "Texture" },

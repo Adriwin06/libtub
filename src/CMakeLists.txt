@@ -3,7 +3,7 @@ include(GenerateExportHeader)
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
-set(HEADER_DIR ${LIBBNDL_ROOT}/include/libbndl)
+set(HEADER_DIR ${LIBBNDL_ROOT}/include/libtub)
 file(GLOB_RECURSE PUBLIC_HEADERS CONFIGURE_DEPENDS
     "${HEADER_DIR}/*.hpp"
     "${HEADER_DIR}/*.h"
@@ -69,7 +69,7 @@ set_target_properties(libbndl PROPERTIES PREFIX ""
                                          POSITION_INDEPENDENT_CODE ON
                                          VERIFY_INTERFACE_HEADER_SETS ${PROJECT_IS_TOP_LEVEL})
 
-generate_export_header(libbndl EXPORT_FILE_NAME include/libbndl/internal/export.h)
+generate_export_header(libbndl EXPORT_FILE_NAME include/libtub/internal/export.h)
 
 target_include_directories(libbndl PUBLIC "${LIBBNDL_ROOT}/include" "${CMAKE_CURRENT_BINARY_DIR}/include")
 
