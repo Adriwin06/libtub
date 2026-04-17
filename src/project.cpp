@@ -506,7 +506,7 @@ bool Bundle::ExportProject(const std::filesystem::path &directory, const Project
 			continue;
 
 		YAML::Node streamNode;
-		streamNode["index"] = index;
+		streamNode["index"] = static_cast<uint32_t>(index);
 		streamNode["name"] = streamName;
 		streamNodes.push_back(streamNode);
 	}
@@ -523,7 +523,7 @@ bool Bundle::ExportProject(const std::filesystem::path &directory, const Project
 	{
 		YAML::Node resourceNode;
 		resourceNode["id"] = FormatResourceID(resource.resourceID);
-		resourceNode["streamIndex"] = resource.streamIndex;
+		resourceNode["streamIndex"] = static_cast<uint32_t>(resource.streamIndex);
 		resourceNode["type"] = FormatUint32(resource.resourceType);
 
 		if (resource.debugData)
@@ -559,7 +559,7 @@ bool Bundle::ExportProject(const std::filesystem::path &directory, const Project
 			{
 				YAML::Node combinedEntry;
 				combinedEntry["id"] = FormatResourceID(resource.resourceID);
-				combinedEntry["streamIndex"] = resource.streamIndex;
+				combinedEntry["streamIndex"] = static_cast<uint32_t>(resource.streamIndex);
 				combinedEntry["imports"] = ExportImports(resource.imports);
 				combinedImportsRoot["resources"].push_back(combinedEntry);
 			}

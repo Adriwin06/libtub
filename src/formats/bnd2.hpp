@@ -24,7 +24,7 @@ namespace libtub::Formats
 		[[nodiscard]] std::vector<MemoryType> GetMemoryTypes() const override;
 
 	protected:
-		[[nodiscard]] constexpr bool AppendsImportsToResource() const override { return false; }
+		[[nodiscard]] constexpr bool AppendsImportsToResource() const override { return true; }
 		[[nodiscard]] bool IsValidPlatform() const override;
 
 		[[nodiscard]] std::vector<ResourceKey> SortedDebugDataKeys() const override;
