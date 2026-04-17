@@ -90,26 +90,39 @@ bool Bnd2::Load(binaryio::BinaryReader &reader)
 		if (m_version < 5)
 			e.importHash = reader.Read<uint64_t>();
 
-		for (auto j = 0; j < blocks; j++)
+		for (uint8_t j = 0; j < blocks; j++)
 		{
 			const auto uncompSize = reader.Read<uint32_t>();
-			e.descriptors[j].uncompressedSize = uncompSize & ~(0xFU << 28);
-			e.descriptors[j].uncompressedAlignment = 1 << (uncompSize >> 28);
+			const auto mappedBlock = MapFileBlockToLibBlock(j);
+			if (!mappedBlock)
+				continue;
+
+			e.descriptors[*mappedBlock].uncompressedSize = uncompSize & ~(0xFU << 28);
+			e.descriptors[*mappedBlock].uncompressedAlignment = 1 << (uncompSize >> 28);
 		}
 
-		for (auto j = 0; j < blocks; j++)
+		for (uint8_t j = 0; j < blocks; j++)
 		{
 			const auto onDiskSize = reader.Read<uint32_t>();
-			e.descriptors[j].onDiskSize = onDiskSize & ~(0xFU << 28);
-			e.descriptors[j].onDiskAlignment = 1 << (onDiskSize >> 28);
+			const auto mappedBlock = MapFileBlockToLibBlock(j);
+			if (!mappedBlock)
+				continue;
+
+			e.descriptors[*mappedBlock].onDiskSize = onDiskSize & ~(0xFU << 28);
+			e.descriptors[*mappedBlock].onDiskAlignment = 1 << (onDiskSize >> 28);
 		}
 
 		auto dataReader = reader.Copy();
-		for (auto j = 0; j < blocks; j++)
+		for (uint8_t j = 0; j < blocks; j++)
 		{
-			dataReader.Seek(fileBlockOffsets[j] + reader.Read<uint32_t>()); // Read offset
+			const auto blockOffset = reader.Read<uint32_t>();
+			const auto mappedBlock = MapFileBlockToLibBlock(j);
+			if (!mappedBlock)
+				continue;
 
-			auto &descriptor = e.descriptors[j];
+			dataReader.Seek(fileBlockOffsets[j] + blockOffset); // Read offset
+
+			auto &descriptor = e.descriptors[*mappedBlock];
 
 			if (descriptor.onDiskSize == 0)
 			{
@@ -380,19 +393,24 @@ std::optional<Resource> Bnd2::GetResource(ResourceKey resourceKey) const
 	const auto numImports = it->second.importCount;
 	if (numImports > 0)
 	{
+		const auto importOffset = static_cast<size_t>(it->second.importOffset);
+		if (buffers[0] == nullptr || importOffset > buffers[0].GetSize())
+			return {};
+
 		imports.reserve(numImports);
 
 		binaryio::BinaryReader reader(buffers[0], GetPlatformEndian());
 		reader.Seek(it->second.importOffset);
 		for (auto i = 0U; i < numImports; i++)
 		{
-			const auto &importEntry = ReadImport(reader);
-			imports.emplace_back(importEntry.resourceID, importEntry.offset);
+			const auto importEntry = ReadImport(reader);
+			imports.emplace_back(importEntry.resourceID, importEntry.offset, importEntry.type);
 		}
 
-		auto buffer = std::make_unique_for_overwrite<uint8_t[]>(buffers[0].GetSize());
-		std::memcpy(buffer.get(), buffers[0].GetData(), buffers[0].GetSize());
-		buffers[0] = { std::move(buffer), buffers[0].GetSize(), buffers[0].GetAlignment() };
+		auto buffer = std::make_unique_for_overwrite<uint8_t[]>(importOffset);
+		if (importOffset > 0)
+			std::memcpy(buffer.get(), buffers[0].GetData(), importOffset);
+		buffers[0] = { std::move(buffer), importOffset, buffers[0].GetAlignment() };
 	}
 
 	return Resource{ std::move(buffers), std::move(imports), it->second.resourceType };

@@ -496,7 +496,7 @@ std::optional<Resource> Bndl::GetResource(ResourceKey resourceKey) const
 	{
 		const auto &importEntries = m_imports.at(resourceKey.first);
 		for (const auto &importEntry : importEntries)
-			imports.emplace_back(importEntry.resourceID, importEntry.offset);
+			imports.emplace_back(importEntry.resourceID, importEntry.offset, importEntry.type);
 	}
 
 	return Resource{ std::move(buffers), std::move(imports), it->second.resourceType };

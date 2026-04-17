@@ -9,6 +9,20 @@
 
 using namespace libtub;
 
+namespace
+{
+	libtub_error CopyStringToBuffer(const std::string &value, char *buffer, size_t length)
+	{
+		if (length == 0)
+			return LIBTUB_ERROR_OUT_OF_RANGE;
+
+		const auto copyLength = std::min(value.size(), length - 1);
+		std::memcpy(buffer, value.c_str(), copyLength);
+		buffer[copyLength] = '\0';
+		return LIBTUB_ERROR_SUCCESS;
+	}
+}
+
 struct libtub_bundle : public Bundle
 {
 	using Bundle::Bundle;
@@ -166,22 +180,12 @@ void libtub_resource_debug_data_free(libtub_resource_debug_data *LIBTUB_NULLABLE
 
 libtub_error libtub_resource_debug_data_get_name(const libtub_resource_debug_data *LIBTUB_NONNULL debugData, char *LIBTUB_NONNULL buffer, size_t length)
 {
-	const auto name = debugData->GetName();
-
-	std::strncpy(buffer, name.c_str(), length);
-	buffer[length - 1] = '\0';
-
-	return LIBTUB_ERROR_SUCCESS;
+	return CopyStringToBuffer(debugData->GetName(), buffer, length);
 }
 
 libtub_error libtub_resource_debug_data_get_type_name(const libtub_resource_debug_data *LIBTUB_NONNULL debugData, char *LIBTUB_NONNULL buffer, size_t length)
 {
-	const auto typeName = debugData->GetTypeName();
-
-	std::strncpy(buffer, typeName.c_str(), length);
-	buffer[length - 1] = '\0';
-
-	return LIBTUB_ERROR_SUCCESS;
+	return CopyStringToBuffer(debugData->GetTypeName(), buffer, length);
 }
 
 void libtub_add_resource_debug_data(libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_id resourceID, const libtub_resource_debug_data *LIBTUB_NONNULL debugData, uint8_t streamIndex)
@@ -461,10 +465,7 @@ int32_t libtub_get_default_resource_stream_index(const libtub_bundle *LIBTUB_NON
 
 libtub_error libtub_get_stream_name(const libtub_bundle *LIBTUB_NONNULL bundle, char *LIBTUB_NONNULL buffer, size_t length, uint8_t streamIndex)
 {
-	const auto streamName = bundle->GetStreamName(streamIndex);
-	std::strncpy(buffer, streamName.c_str(), length);
-
-	return LIBTUB_ERROR_SUCCESS;
+	return CopyStringToBuffer(bundle->GetStreamName(streamIndex), buffer, length);
 }
 
 bool libtub_is_valid_memory_type(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_memory_type memoryType)

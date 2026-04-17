@@ -26,7 +26,7 @@ namespace libtub
 			[[nodiscard]] virtual std::vector<MemoryType> GetMemoryTypes() const override;
 
 		protected:
-			virtual constexpr bool AppendsImportsToResource() const override { return false; }
+			virtual constexpr bool AppendsImportsToResource() const override { return true; }
 			virtual bool IsValidPlatform() const override;
 
 			virtual std::vector<ResourceKey> SortedDebugDataKeys() const override;

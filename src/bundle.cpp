@@ -4,6 +4,7 @@
 #include <binaryio/binaryreader.hpp>
 #include <binaryio/binarywriter.hpp>
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <locale>
@@ -165,7 +166,22 @@ std::optional<Resource> Bundle::GetResource(ResourceID resourceID, uint8_t strea
 
 Buffer Bundle::GetBinary(ResourceID resourceID, MemoryType memoryType, uint8_t streamIndex) const
 {
-	return m_impl->GetBinary({ resourceID, streamIndex }, memoryType);
+	if (!m_impl)
+		return {};
+
+	const auto resource = m_impl->GetResource({ resourceID, streamIndex });
+	if (!resource)
+		return {};
+
+	const auto &buffer = resource->GetBinary(memoryType);
+	if (buffer == nullptr)
+		return {};
+
+	auto copy = std::make_unique_for_overwrite<uint8_t[]>(buffer.GetSize());
+	if (buffer.GetSize() > 0)
+		std::memcpy(copy.get(), buffer.GetData(), buffer.GetSize());
+
+	return { std::move(copy), buffer.GetSize(), buffer.GetAlignment() };
 }
 
 std::optional<ResourceDebugData> Bundle::GetResourceDebugData(ResourceID resourceID, uint8_t streamIndex) const

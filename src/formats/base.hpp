@@ -66,6 +66,7 @@ namespace libtub
 		{
 			ResourceID resourceID;
 			uint32_t offset;
+			Import::ImportType type;
 		};
 
 		class Base

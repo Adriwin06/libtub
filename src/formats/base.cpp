@@ -150,15 +150,14 @@ bool Base::ReplaceResource(ResourceKey resourceKey, const Resource &resource)
 			const auto depSize = writer.GetSize();
 			auto depStream = writer.GetStream();
 
-			auto inDataInfoSize = inDataInfo.GetSize();
-			inDataInfoSize = binaryio::Align(inDataInfoSize, 16);
+			const auto inDataInfoSize = inDataInfo.GetSize();
 
 			inSize = inDataInfoSize + depSize;
 			inBuffer = std::make_unique_for_overwrite<uint8_t[]>(inSize);
 			std::memcpy(inBuffer.get(), inDataInfo.GetData(), inDataInfoSize);
 			std::memcpy(inBuffer.get() + inDataInfoSize, depStream.view().data(), depSize);
 
-			e.importOffset = static_cast<uint32_t>(inSize);
+			e.importOffset = static_cast<uint32_t>(inDataInfoSize);
 			e.importCount = static_cast<uint16_t>(imports.size());
 		}
 		else
@@ -383,10 +382,11 @@ std::vector<std::pair<std::string, std::string>> Base::GetDebugDataAttributes(co
 
 ImportEntry Base::ReadImport(binaryio::BinaryReader &reader)
 {
-	const ImportEntry &dep = {
-		ResourceID(reader.Read<uint64_t>()),
-		reader.Read<uint32_t>()
-	};
+	ImportEntry dep;
+	dep.resourceID = ResourceID(reader.Read<uint64_t>());
+	const auto encodedOffset = reader.Read<uint32_t>();
+	dep.offset = encodedOffset & 0x7FFFFFFF;
+	dep.type = static_cast<Import::ImportType>((encodedOffset >> 31) & 1);
 	reader.Skip<uint32_t>();
 	return dep;
 }
@@ -394,6 +394,6 @@ ImportEntry Base::ReadImport(binaryio::BinaryReader &reader)
 void Base::WriteImport(binaryio::BinaryWriter &writer, const Import &import)
 {
 	writer.Write<uint64_t>(import.GetResourceID());
-	writer.Write(import.GetOffset());
+	writer.Write(import.GetOffset() | (static_cast<uint32_t>(import.GetImportType()) << 31));
 	writer.Align(8);
 }

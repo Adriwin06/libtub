@@ -7,3 +7,8 @@
 [submodule "ref/libbndl"]
 	path = ref/libbndl
 	url = https://github.com/Bo98/libbndl.git
+	branch = master
+[submodule "ref/libbndl-2025"]
+	path = ref/libbndl-2025
+	url = git@github.com:Bo98/libbndl.git
+	branch = 2025
