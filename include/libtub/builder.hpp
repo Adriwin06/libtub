@@ -13,6 +13,15 @@ namespace libtub
 		Flags flags;
 	};
 
+	namespace BundleProfiles
+	{
+		[[nodiscard]] LIBTUB_EXPORT BundleProfile BurnoutParadisePC();
+		[[nodiscard]] LIBTUB_EXPORT BundleProfile BurnoutParadiseXbox360();
+		[[nodiscard]] LIBTUB_EXPORT BundleProfile BurnoutParadisePS3();
+		[[nodiscard]] LIBTUB_EXPORT BundleProfile NeedForSpeedHotPursuitPC();
+		[[nodiscard]] LIBTUB_EXPORT BundleProfile BndlPC(uint16_t version = 5, Flags flags = Flags::HasDebugData);
+	}
+
 	class BundleResourceBuilder
 	{
 	public:
@@ -33,13 +42,18 @@ namespace libtub
 		LIBTUB_EXPORT BundleResourceBuilder &Import(ResourceID resourceID, uint32_t offset, Import::ImportType type = Import::ImportType::Pointer);
 		LIBTUB_EXPORT BundleResourceBuilder &DebugData(std::string name, std::string typeName);
 		LIBTUB_EXPORT bool Commit();
+		[[nodiscard]] LIBTUB_EXPORT const std::string &GetLastErrorMessage() const noexcept;
 
 	private:
+		bool Fail(std::string message);
+		[[nodiscard]] bool Validate();
+
 		Bundle *m_bundle;
 		ResourceID m_resourceID;
 		uint8_t m_streamIndex;
 		Resource m_resource;
 		std::optional<ResourceDebugData> m_debugData;
+		std::string m_lastErrorMessage;
 	};
 
 	class BundleBuilder

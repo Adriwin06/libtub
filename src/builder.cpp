@@ -1,4 +1,6 @@
 #include <libtub/builder.hpp>
+#include <algorithm>
+#include <array>
 #include <cstring>
 
 using namespace libtub;
@@ -13,6 +15,40 @@ namespace
 
 		return { std::move(buffer), data.size(), alignment };
 	}
+
+	constexpr Flags kBurnoutParadiseFlags = Flags::Compressed | Flags::MainMemOptimised | Flags::GraphicsMemOptimised | Flags::HasDebugData;
+
+	constexpr std::array<MemoryType, 4> kMemoryTypeSlots = {
+		MemoryType::MainMemory,
+		MemoryType::GraphicsSystem,
+		MemoryType::GraphicsLocal,
+		MemoryType::Disposable,
+	};
+}
+
+BundleProfile BundleProfiles::BurnoutParadisePC()
+{
+	return { Magic::Bnd2, 2, Platform::PC, kBurnoutParadiseFlags };
+}
+
+BundleProfile BundleProfiles::BurnoutParadiseXbox360()
+{
+	return { Magic::Bnd2, 2, Platform::Xbox360, kBurnoutParadiseFlags };
+}
+
+BundleProfile BundleProfiles::BurnoutParadisePS3()
+{
+	return { Magic::Bnd2, 2, Platform::PS3, kBurnoutParadiseFlags };
+}
+
+BundleProfile BundleProfiles::NeedForSpeedHotPursuitPC()
+{
+	return { Magic::Bnd2, 5, Platform::PC, Flags::HasDebugData };
+}
+
+BundleProfile BundleProfiles::BndlPC(uint16_t version, Flags flags)
+{
+	return { Magic::Bndl, version, Platform::PC, flags };
 }
 
 BundleResourceBuilder::BundleResourceBuilder(Bundle &bundle, ResourceID resourceID, uint32_t resourceType, uint8_t streamIndex)
@@ -79,11 +115,54 @@ BundleResourceBuilder &BundleResourceBuilder::DebugData(std::string name, std::s
 
 bool BundleResourceBuilder::Commit()
 {
-	if (m_bundle == nullptr || !m_bundle->AddResource(m_resourceID, m_resource, m_streamIndex))
+	if (!Validate())
 		return false;
 
+	if (!m_bundle->AddResource(m_resourceID, m_resource, m_streamIndex))
+		return Fail(m_bundle->GetLastErrorMessage().empty() ? "Failed to add resource to bundle." : m_bundle->GetLastErrorMessage());
+
 	if (m_debugData && !m_bundle->AddResourceDebugData(m_resourceID, *m_debugData, m_streamIndex))
-		return false;
+		return Fail(m_bundle->GetLastErrorMessage().empty() ? "Failed to add resource debug data to bundle." : m_bundle->GetLastErrorMessage());
+
+	m_lastErrorMessage.clear();
+	return true;
+}
+
+const std::string &BundleResourceBuilder::GetLastErrorMessage() const noexcept
+{
+	return m_lastErrorMessage;
+}
+
+bool BundleResourceBuilder::Fail(std::string message)
+{
+	m_lastErrorMessage = std::move(message);
+	return false;
+}
+
+bool BundleResourceBuilder::Validate()
+{
+	if (m_bundle == nullptr)
+		return Fail("Builder is no longer attached to a bundle.");
+
+	if (!m_bundle->IsValid())
+		return Fail("Builder is attached to an invalid bundle.");
+
+	if (m_streamIndex >= 4)
+		return Fail("Stream index must be in the range 0..3.");
+
+	const auto memoryTypes = m_bundle->GetMemoryTypes();
+	for (const auto memoryType : kMemoryTypeSlots)
+	{
+		const auto &buffer = m_resource.GetBinary(memoryType);
+		if (buffer == nullptr)
+			continue;
+
+		if (buffer.GetAlignment() == 0)
+			return Fail("Memory block alignment must be greater than zero.");
+
+		if (std::find(memoryTypes.begin(), memoryTypes.end(), memoryType) == memoryTypes.end())
+			return Fail("Memory block is not valid for the selected bundle platform.");
+	}
 
 	return true;
 }

@@ -83,7 +83,8 @@ bool Bnd2::Load(binaryio::BinaryReader &reader)
 	for (auto i = 0U; i < numEntries; i++)
 	{
 		const auto resourceID = ResourceID(reader.Read<uint64_t>());
-		assert(resourceID != 0);
+		if (resourceID == 0)
+			return false;
 
 		ResourceEntry e;
 
@@ -137,10 +138,11 @@ bool Bnd2::Load(binaryio::BinaryReader &reader)
 		e.resourceType = reader.Read<uint32_t>();
 		e.importCount = reader.Read<uint16_t>();
 
-		reader.Verify<uint8_t>(0); // flags
+		reader.Skip<uint8_t>(); // flags
 		
 		const auto streamIndex = reader.Read<uint8_t>();
-		assert(streamIndex == 0 || m_flags & Flags::MultistreamBundle);
+		if (streamIndex != 0 && !(m_flags & Flags::MultistreamBundle))
+			return false;
 		m_entries.emplace(std::make_pair(resourceID, streamIndex), std::move(e));
 
 		reader.Align(8);

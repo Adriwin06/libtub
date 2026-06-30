@@ -19,9 +19,26 @@ else()
 endif()
 
 target_compile_features(bndl_util PRIVATE cxx_std_20)
+if(LIBTUB_BUILD_PROJECT_SUPPORT)
+    target_compile_definitions(bndl_util PRIVATE LIBTUB_HAS_PROJECT_SUPPORT)
+endif()
 
 if(MSVC)
     target_compile_options(bndl_util PRIVATE "/W4" "/Zc:throwingNew" "/EHsc")
+endif()
+
+if(WIN32 AND BUILD_SHARED_LIBS)
+    set(BNDL_UTIL_RUNTIME_DLLS $<TARGET_RUNTIME_DLLS:bndl_util>)
+    if(TARGET yaml-cpp)
+        list(APPEND BNDL_UTIL_RUNTIME_DLLS $<TARGET_FILE:yaml-cpp>)
+    elseif(TARGET yaml-cpp::yaml-cpp)
+        list(APPEND BNDL_UTIL_RUNTIME_DLLS $<TARGET_FILE:yaml-cpp::yaml-cpp>)
+    endif()
+
+    add_custom_command(TARGET bndl_util POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${BNDL_UTIL_RUNTIME_DLLS} $<TARGET_FILE_DIR:bndl_util>
+        COMMAND_EXPAND_LISTS
+    )
 endif()
 
 if(LIBTUB_INSTALL_TOOLS)

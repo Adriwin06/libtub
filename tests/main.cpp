@@ -1,3 +1,4 @@
+#include <libtub/bundle.h>
 #include <libtub/bundle.hpp>
 #include <libtub/builder.hpp>
 #include <chrono>
@@ -157,7 +158,7 @@ namespace
 	{
 		using namespace libtub;
 
-		BundleBuilder builder(Magic::Bnd2, 5, Platform::PC, Flags::HasDebugData);
+		BundleBuilder builder(BundleProfiles::NeedForSpeedHotPursuitPC());
 		builder.SetStreamName(0, "base");
 
 		const ResourceID resourceID("builder_resource");
@@ -187,6 +188,125 @@ namespace
 		ok &= ExpectBytes(reloaded.GetBinary(resourceID, MemoryType::MainMemory), bytes, "builder: main memory mismatch");
 		return ok;
 	}
+
+	bool TestBundleBuilderValidation()
+	{
+		using namespace libtub;
+
+		BundleBuilder builder(BundleProfiles::NeedForSpeedHotPursuitPC());
+		const ResourceID resourceID("invalid_builder_resource");
+		const std::vector<uint8_t> bytes{ 0x01, 0x02, 0x03 };
+		auto resource = builder.AddResource(resourceID, ResourceType::NeedForSpeed::BinaryFile);
+		const bool committed = resource.GraphicsSystem(std::span<const uint8_t>(bytes), 4).Commit();
+
+		bool ok = true;
+		ok &= Expect(!committed, "builder validation: invalid memory type was accepted");
+		ok &= Expect(!resource.GetLastErrorMessage().empty(), "builder validation: missing error message");
+		return ok;
+	}
+
+	bool TestCApiBinaryErrors()
+	{
+		libtub_bundle *bundle = nullptr;
+		if (!Expect(libtub_create(&bundle, LIBTUB_MAGIC_BND2, 5, LIBTUB_PLATFORM_PC, LIBTUB_FLAGS_HAS_DEBUG_DATA) == LIBTUB_ERROR_SUCCESS, "C API: create failed"))
+			return false;
+
+		libtub_resource *resource = nullptr;
+		libtub_buffer *input = nullptr;
+		libtub_buffer *output = nullptr;
+		bool ok = true;
+
+		const std::vector<uint8_t> bytes{ 0xCA, 0xFE, 0xBA, 0xBE };
+		const auto resourceID = libtub_resource_id_from_name("c_api_resource");
+		ok &= Expect(libtub_resource_create(&resource, LIBTUB_RESOURCE_TYPE_NFS_BINARY_FILE) == LIBTUB_ERROR_SUCCESS, "C API: resource create failed");
+		ok &= Expect(libtub_buffer_create(&input, bytes.data(), bytes.size(), 4) == LIBTUB_ERROR_SUCCESS, "C API: buffer create failed");
+		ok &= Expect(libtub_resource_replace_binary(resource, input, LIBTUB_MEMORY_TYPE_MAIN_MEMORY) == LIBTUB_ERROR_SUCCESS, "C API: replace binary failed");
+		ok &= Expect(libtub_add_resource(bundle, resourceID, resource, 0) == LIBTUB_ERROR_SUCCESS, "C API: add resource failed");
+		ok &= Expect(libtub_copy_binary(bundle, &output, resourceID, LIBTUB_MEMORY_TYPE_MAIN_MEMORY, 0) == LIBTUB_ERROR_SUCCESS, "C API: copy binary failed");
+		if (output != nullptr)
+		{
+			ok &= Expect(libtub_buffer_get_size(output) == bytes.size(), "C API: copied buffer size mismatch");
+			ok &= Expect(std::memcmp(libtub_buffer_get_data(output), bytes.data(), bytes.size()) == 0, "C API: copied buffer content mismatch");
+			libtub_buffer_free(output);
+			output = nullptr;
+		}
+
+		ok &= Expect(libtub_copy_binary(bundle, &output, resourceID, LIBTUB_MEMORY_TYPE_DISPOSABLE, 0) == LIBTUB_ERROR_RESOURCE_NOT_FOUND, "C API: missing block should fail");
+		ok &= Expect(output == nullptr, "C API: missing block returned a buffer");
+		ok &= Expect(libtub_get_last_error_code(bundle) == LIBTUB_ERROR_RESOURCE_NOT_FOUND, "C API: last error mismatch");
+
+		char errorMessage[128]{};
+		ok &= Expect(libtub_get_last_error_message(bundle, errorMessage, sizeof(errorMessage)) == LIBTUB_ERROR_SUCCESS, "C API: last error message copy failed");
+		ok &= Expect(std::strlen(errorMessage) > 0, "C API: last error message was empty");
+
+		ok &= Expect(libtub_copy_binary(nullptr, &output, resourceID, LIBTUB_MEMORY_TYPE_MAIN_MEMORY, 0) == LIBTUB_ERROR_INVALID_ARGUMENT, "C API: null bundle should fail");
+
+		libtub_buffer_free(input);
+		libtub_resource_free(resource);
+		libtub_free(bundle);
+		return ok;
+	}
+
+	bool TestBndlPlatformRoundTrip(libtub::Platform platform)
+	{
+		using namespace libtub;
+
+		Bundle bundle(Magic::Bndl, 5, platform, Flags());
+		const ResourceID resourceID(std::string("bndl_platform_resource_") + std::to_string(static_cast<uint16_t>(platform)));
+		Resource resource(ResourceType::Burnout::BinaryFile);
+
+		const std::vector<uint8_t> mainBytes{ 0x10, 0x11, 0x12 };
+		resource.ReplaceBinary(MemoryType::MainMemory, MakeBuffer(mainBytes, 16));
+
+		std::vector<uint8_t> secondaryBytes;
+		MemoryType secondaryType = MemoryType::Disposable;
+		if (platform == Platform::PC)
+		{
+			secondaryType = MemoryType::Disposable;
+			secondaryBytes = { 0x20, 0x21 };
+		}
+		else if (platform == Platform::Xbox360)
+		{
+			secondaryType = MemoryType::Physical;
+			secondaryBytes = { 0x30, 0x31, 0x32 };
+		}
+		else if (platform == Platform::PS3)
+		{
+			secondaryType = MemoryType::GraphicsLocal;
+			secondaryBytes = { 0x40, 0x41, 0x42, 0x43 };
+		}
+
+		resource.ReplaceBinary(secondaryType, MakeBuffer(secondaryBytes, 16));
+		if (!Expect(bundle.AddResource(resourceID, resource), "BNDL platform round-trip: failed to add resource"))
+			return false;
+
+		const auto saved = bundle.SaveToMemory();
+		if (!Expect(!saved.empty(), "BNDL platform round-trip: failed to serialize"))
+			return false;
+
+		Bundle reloaded;
+		if (!Expect(reloaded.Load(std::span<const uint8_t>(saved)), "BNDL platform round-trip: failed to reload"))
+		{
+			std::cerr << "  load error: " << reloaded.GetLastErrorMessage() << "\n";
+			return false;
+		}
+
+		bool ok = true;
+		ok &= Expect(reloaded.GetMagic() == Magic::Bndl, "BNDL platform round-trip: magic mismatch");
+		ok &= Expect(reloaded.GetPlatform() == platform, "BNDL platform round-trip: platform mismatch");
+		ok &= ExpectBytes(reloaded.GetBinary(resourceID, MemoryType::MainMemory), mainBytes, "BNDL platform round-trip: main memory mismatch");
+		ok &= ExpectBytes(reloaded.GetBinary(resourceID, secondaryType), secondaryBytes, "BNDL platform round-trip: secondary memory mismatch");
+		return ok;
+	}
+
+	bool TestBndlPlatformRoundTrips()
+	{
+		bool ok = true;
+		ok &= TestBndlPlatformRoundTrip(libtub::Platform::PC);
+		ok &= TestBndlPlatformRoundTrip(libtub::Platform::Xbox360);
+		ok &= TestBndlPlatformRoundTrip(libtub::Platform::PS3);
+		return ok;
+	}
 }
 
 int main()
@@ -197,5 +317,8 @@ int main()
 	ok &= TestProjectRoundTrip();
 #endif
 	ok &= TestBundleBuilder();
+	ok &= TestBundleBuilderValidation();
+	ok &= TestCApiBinaryErrors();
+	ok &= TestBndlPlatformRoundTrips();
 	return ok ? 0 : 1;
 }

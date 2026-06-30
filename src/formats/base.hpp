@@ -19,6 +19,9 @@ namespace libtub::Formats
 {
 	inline unsigned long BitScanReverse(unsigned long input)
 	{
+		if (input == 0)
+			return 0;
+
 		unsigned long result;
 
 #if defined(_MSC_VER)

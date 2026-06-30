@@ -472,13 +472,17 @@ namespace
 
 bool Bundle::ExportProject(const std::filesystem::path &directory, const ProjectExportOptions &options) const
 {
+	const auto fail = [this](ErrorCode code, std::string message) {
+		return Fail(code, std::move(message));
+	};
+
 	if (!m_impl)
-		return false;
+		return fail(ErrorCode::InvalidState, "Cannot export an empty bundle.");
 
 	std::error_code error;
 	std::filesystem::create_directories(directory, error);
 	if (error)
-		return false;
+		return fail(ErrorCode::IoError, "Could not create project export directory.");
 
 	YAML::Node root;
 	root["schemaVersion"] = 1;
@@ -544,7 +548,7 @@ bool Bundle::ExportProject(const std::filesystem::path &directory, const Project
 			const auto fileName = resourceStem + "." + MemoryTypeToString(block.memoryType) + ".bin";
 			const auto relativePath = resourceFolder / fileName;
 			if (!WriteBinaryFile(directory / relativePath, buffer))
-				return false;
+				return fail(ErrorCode::IoError, "Could not write project binary file.");
 
 			YAML::Node blockNode;
 			blockNode["path"] = relativePath.generic_string();
@@ -567,7 +571,7 @@ bool Bundle::ExportProject(const std::filesystem::path &directory, const Project
 			{
 				const auto importPath = resourceFolder / (resourceStem + ".imports.yaml");
 				if (!WriteYamlFile(directory / importPath, ExportImports(resource.imports)))
-					return false;
+					return fail(ErrorCode::IoError, "Could not write project imports file.");
 
 				resourceNode["imports"] = importPath.generic_string();
 			}
@@ -579,33 +583,41 @@ bool Bundle::ExportProject(const std::filesystem::path &directory, const Project
 	root["resources"] = resourcesNode;
 
 	if (!WriteYamlFile(directory / ".meta.yaml", root))
-		return false;
+		return fail(ErrorCode::IoError, "Could not write project metadata file.");
 
 	if (options.combineImports && combinedImportsRoot["resources"].size() > 0)
-		return WriteYamlFile(directory / ".imports.yaml", combinedImportsRoot);
+	{
+		if (!WriteYamlFile(directory / ".imports.yaml", combinedImportsRoot))
+			return fail(ErrorCode::IoError, "Could not write project combined imports file.");
+	}
 
+	ClearLastError();
 	return true;
 }
 
 bool Bundle::ImportProject(const std::filesystem::path &directory)
 {
+	const auto fail = [this](std::string message) {
+		return Fail(ErrorCode::InvalidProject, std::move(message));
+	};
+
 	try
 	{
 		const auto metadataPath = directory / ".meta.yaml";
 		if (!std::filesystem::exists(metadataPath))
-			return false;
+			return fail("Project metadata file was not found.");
 
 		const auto root = YAML::LoadFile(metadataPath.string());
 		const auto bundleNode = root["bundle"];
 		const auto resourcesNode = root["resources"];
 		if (!bundleNode || !resourcesNode)
-			return false;
+			return fail("Project metadata is missing bundle or resources sections.");
 
 		const auto magic = ParseMagic(bundleNode["magic"]);
 		const auto version = ParseUnsignedScalar<uint16_t>(bundleNode["version"]);
 		const auto platform = ParsePlatform(bundleNode["platform"]);
 		if (!magic || !version || !platform)
-			return false;
+			return fail("Project metadata has an invalid bundle identity.");
 
 		Bundle imported(*magic, *version, *platform, ParseFlagsNode(bundleNode));
 
@@ -615,16 +627,16 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 			{
 				const auto index = ParseUnsignedScalar<uint8_t>(streamNode["index"]);
 				if (!index || !streamNode["name"] || !streamNode["name"].IsScalar())
-					return false;
+					return fail("Project stream metadata is invalid.");
 
 				if (!imported.SetStreamName(*index, streamNode["name"].Scalar()))
-					return false;
+					return fail("Project stream metadata is not valid for this bundle format.");
 			}
 		}
 
 		const auto combinedImports = LoadCombinedImports(directory / ".imports.yaml");
 		if (!resourcesNode.IsSequence())
-			return false;
+			return fail("Project resources section must be a sequence.");
 
 		for (const auto &resourceNode : resourcesNode)
 		{
@@ -632,12 +644,12 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 			const auto streamIndex = ParseUnsignedScalar<uint8_t>(resourceNode["streamIndex"]).value_or(0);
 			const auto resourceType = ParseUnsignedScalar<uint32_t>(resourceNode["type"]);
 			if (!resourceID || !resourceType)
-				return false;
+				return fail("Project resource metadata is invalid.");
 
 			Resource resource(*resourceType);
 			const auto binariesNode = resourceNode["binaries"];
 			if (!binariesNode || !binariesNode.IsMap())
-				return false;
+				return fail("Project resource is missing binary metadata.");
 
 			for (const auto &memoryType : imported.GetMemoryTypes())
 			{
@@ -654,7 +666,7 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 				else
 				{
 					if (!blockNode["path"] || !blockNode["path"].IsScalar())
-						return false;
+						return fail("Project binary block is missing a path.");
 
 					relativePath = blockNode["path"].Scalar();
 					alignment = ParseUnsignedScalar<uint32_t>(blockNode["alignment"]).value_or(1);
@@ -662,7 +674,7 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 
 				const auto bufferData = ReadBinaryFile(directory / relativePath);
 				if (!bufferData)
-					return false;
+					return fail("Project binary file could not be read.");
 
 				resource.ReplaceBinary(memoryType, MakeBuffer(*bufferData, alignment));
 			}
@@ -675,7 +687,7 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 					const auto importRoot = YAML::LoadFile((directory / resourceNode["imports"].Scalar()).string());
 					const auto parsedImports = ParseImportList(importRoot);
 					if (!parsedImports)
-						return false;
+						return fail("Project imports file is invalid.");
 
 					imports = *parsedImports;
 				}
@@ -683,7 +695,7 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 				{
 					const auto parsedImports = ParseImportList(resourceNode["imports"]);
 					if (!parsedImports)
-						return false;
+						return fail("Project resource imports are invalid.");
 
 					imports = *parsedImports;
 				}
@@ -699,14 +711,14 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 				resource.AddImport(importEntry);
 
 			if (!imported.AddResource(*resourceID, resource, streamIndex))
-				return false;
+				return fail("Project resource could not be added to the bundle.");
 
 			if (resourceNode["name"] || resourceNode["typeName"])
 			{
 				const auto name = resourceNode["name"] ? resourceNode["name"].Scalar() : "";
 				const auto typeName = resourceNode["typeName"] ? resourceNode["typeName"].Scalar() : "";
 				if (!imported.AddResourceDebugData(*resourceID, ResourceDebugData(name, typeName), streamIndex))
-					return false;
+					return fail("Project resource debug data could not be added to the bundle.");
 			}
 		}
 
@@ -715,14 +727,15 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 			const auto defaultResourceID = ParseResourceID(bundleNode["defaultResource"]["id"]);
 			const auto defaultStreamIndex = ParseSignedScalar(bundleNode["defaultResource"]["streamIndex"]).value_or(0);
 			if (!defaultResourceID || !imported.SetDefaultResource(*defaultResourceID, defaultStreamIndex))
-				return false;
+				return fail("Project default resource is invalid.");
 		}
 
 		*this = std::move(imported);
+		ClearLastError();
 		return true;
 	}
 	catch (const std::exception &)
 	{
-		return false;
+		return fail("Project import threw while reading metadata.");
 	}
 }
