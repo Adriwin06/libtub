@@ -116,6 +116,8 @@ void YAP::setPlatform(GameDataStream& stream, Bundle bundle)
 		stream.setPlatform(GameDataStream::Platform::X360);
 	else if (bundle.platform == 3)
 		stream.setPlatform(GameDataStream::Platform::PS3);
+	else if (bundle.platform == 4) // Decomp
+		stream.setPlatform(GameDataStream::Platform::PCx64);
 }
 
 void YAP::createResourceEntry(YAML::const_iterator& resource, Bundle& bundle, int index)

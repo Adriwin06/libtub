@@ -1,17 +1,7 @@
-[submodule "ref/Bundle-Manager"]
-	path = ref/Bundle-Manager
-	url = https://github.com/BurnoutHints/Bundle-Manager.git
 [submodule "ref/YAP"]
 	path = ref/YAP
-	url = https://github.com/burninrubber0/YAP.git
-[submodule "ref/libbndl"]
-	path = ref/libbndl
-	url = https://github.com/Bo98/libbndl.git
-	branch = master
-[submodule "ref/libbndl-2025"]
-	path = ref/libbndl-2025
-	url = git@github.com:Bo98/libbndl.git
-	branch = 2025
+	url = https://github.com/BurnoutDecomp/YAP.git
+	branch = decomp
 [submodule "tests/third_party/libbndl-extractor"]
 	path = tests/third_party/libbndl-extractor
 	url = https://github.com/Adriwin06/libbndl-extractor.git

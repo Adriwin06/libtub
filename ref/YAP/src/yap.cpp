@@ -251,9 +251,9 @@ bool YAP::validateBundleMetadata(YAML::Node& meta)
 		return false;
 	}
 	uint32_t platform = meta["bundle"]["platform"].as<uint32_t>();
-	if (platform < 1 || platform > 3)
+	if (platform < 1 || platform > 4)
 	{
-		qCritical() << "Invalid bundle platform: Must be 1, 2, or 3.";
+		qCritical() << "Invalid bundle platform: Must be 1, 2, 3, or 4.";
 		return false;
 	}
 	// Compressed and optimised flags checked during bundle creation

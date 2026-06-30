@@ -1,8 +1,0 @@
-.idea/
-.vs/
-.vscode/
-/packages/
-**/bin/
-**/obj/
-*.user
-*.sdf

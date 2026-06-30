@@ -1,6 +1,6 @@
 [submodule "external/GameDataStream"]
 	path = external/GameDataStream
-	url = https://github.com/burninrubber0/GameDataStream
+	url = https://github.com/BPDecomp/GameDataStream
 [submodule "external/libdeflate"]
 	path = external/libdeflate
 	url = https://github.com/ebiggers/libdeflate

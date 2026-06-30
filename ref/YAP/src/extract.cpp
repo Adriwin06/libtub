@@ -49,6 +49,8 @@ bool YAP::validateBundle(GameDataStream& stream)
 		stream.setPlatform(GameDataStream::Platform::X360);
 	else if (platform == 0x03000000)
 		stream.setPlatform(GameDataStream::Platform::PS3);
+	else if (platform == 4) // Decomp
+		stream.setPlatform(GameDataStream::Platform::PCx64);
 	else if (platform != 1)
 	{
 		qCritical() << "Invalid bundle platform. Extraction aborted.";
@@ -393,7 +395,7 @@ void YAP::outputMetadata(Bundle& bundle)
 		<< YAML::Value
 		<< YAML::BeginMap // bundle
 		<< YAML::Key << "platform"
-		<< YAML::Value << YAML::Dec << bundle.platform // 1=pc, 2=x360, 3=ps3
+		<< YAML::Value << YAML::Dec << bundle.platform // 1=pc, 2=x360, 3=ps3, 4=decomp
 		<< YAML::Key << "compressed"
 		<< YAML::Value << (bool)((bundle.flags & (uint32_t)Bundle::Flags::IsCompressed))
 		<< YAML::Key << "mainMemOptimised"

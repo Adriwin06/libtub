@@ -1,7 +1,0 @@
-* text eol=crlf
-
-*.ico binary
-*.png binary
-*.xcf binary
-*.dll binary
-*.rct binary
