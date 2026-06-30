@@ -6,10 +6,19 @@
 
 - BNDL plus BND2 v2, v3, and v5 support through the imported `libbndl` 2025 parser/writer model.
 - Direct in-memory loading and saving, so callers do not need temp extraction just to inspect or transform a bundle.
+- A lean `libtub_core` target for parser/writer and builder use without the YAML project layer.
+- A `BundleBuilder` facade for tools that want to author resources without dealing with the lower-level `Resource` plumbing directly.
 - YAML project export/import inspired by YAP, but generalized for multistream bundles and non-pointer import kinds.
 - High-level `DescribeResources()` output that surfaces stream indices, debug data, imports, and per-memory binary metadata in one place.
 - BND2 v5 setters for default-resource metadata and stream names so project round-trips can preserve more than raw payload bytes.
 - A cleaned-up standalone `libtub` target/namespace/header layout instead of leaving the project as a renamed upstream drop.
+
+## Build targets
+
+- `libtub_core`: core bundle loading, saving, resources, imports, debug string table support, compression, and `BundleBuilder`.
+- `libtub`: the full compatibility target. It includes `libtub_core` features plus YAML project import/export.
+
+Project import/export is controlled by `LIBTUB_BUILD_PROJECT_SUPPORT`, which defaults to `ON`.
 
 ## Project layout
 
@@ -48,8 +57,34 @@ The library uses CMake `FetchContent` for:
 ## Example
 
 ```cpp
-#include <libtub/bundle.hpp>
+#include <libtub/builder.hpp>
 #include <filesystem>
+
+int main()
+{
+	libtub::BundleBuilder builder(libtub::Magic::Bnd2, 5, libtub::Platform::PC, libtub::Flags::HasDebugData);
+	builder.SetStreamName(0, "base");
+
+	const std::vector<uint8_t> data{ 0x01, 0x02, 0x03, 0x04 };
+	const auto resourceID = libtub::ResourceID("example.bin");
+	if (!builder.AddResource(resourceID, libtub::ResourceType::NeedForSpeed::BinaryFile)
+		.MainMemory(data, 4)
+		.DebugData("example.bin", "BinaryFile")
+		.Commit())
+		return 1;
+
+	if (!builder.SetDefaultResource(resourceID))
+		return 2;
+
+	const auto bytes = builder.SaveToMemory();
+	return bytes.empty();
+}
+```
+
+Project export/import remains available through the full `libtub` target:
+
+```cpp
+#include <libtub/bundle.hpp>
 
 int main()
 {
@@ -57,21 +92,7 @@ int main()
 	if (!bundle.Load("GLOBALB.LZC"))
 		return 1;
 
-	const auto resources = bundle.DescribeResources();
-	const auto bytes = bundle.SaveToMemory();
-
-	libtub::ProjectExportOptions options;
-	options.sortByType = true;
-	options.combineImports = false;
-
-	if (!bundle.ExportProject("out/project", options))
-		return 2;
-
-	libtub::Bundle roundTrip;
-	if (!roundTrip.ImportProject("out/project"))
-		return 3;
-
-	return resources.empty() || bytes.empty();
+	return bundle.ExportProject("out/project") ? 0 : 2;
 }
 ```
 

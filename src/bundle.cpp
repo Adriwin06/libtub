@@ -57,6 +57,11 @@ Bundle &Bundle::operator=(Bundle &&other) noexcept = default;
 
 Bundle::~Bundle() = default;
 
+bool Bundle::IsValid() const noexcept
+{
+	return m_impl != nullptr;
+}
+
 bool Bundle::Load(const std::filesystem::path &path)
 {
 	std::ifstream stream;
@@ -100,6 +105,9 @@ bool Bundle::Load(std::span<const uint8_t> data)
 
 bool Bundle::Save(const std::filesystem::path &path)
 {
+	if (!m_impl)
+		return false;
+
 	auto writer = binaryio::BinaryWriter();
 
 	if (!m_impl->Save(writer))
@@ -130,36 +138,57 @@ std::vector<uint8_t> Bundle::SaveToMemory()
 
 Magic Bundle::GetMagic() const
 {
+	if (!m_impl)
+		return static_cast<Magic>(0);
+
 	return m_impl->GetMagic();
 }
 
 uint16_t Bundle::GetVersion() const
 {
+	if (!m_impl)
+		return 0;
+
 	return m_impl->GetVersion();
 }
 
 Platform Bundle::GetPlatform() const
 {
+	if (!m_impl)
+		return static_cast<Platform>(0);
+
 	return m_impl->GetPlatform();
 }
 
 Flags Bundle::GetFlags() const
 {
+	if (!m_impl)
+		return {};
+
 	return m_impl->GetFlags();
 }
 
 bool Bundle::IsBurnoutEra() const
 {
+	if (!m_impl)
+		return false;
+
 	return GetMagic() == Magic::Bndl || GetVersion() <= 2;
 }
 
 bool Bundle::IsNeedForSpeedEra() const
 {
+	if (!m_impl)
+		return false;
+
 	return GetMagic() == Magic::Bnd2 && GetVersion() >= 3;
 }
 
 std::optional<Resource> Bundle::GetResource(ResourceID resourceID, uint8_t streamIndex) const
 {
+	if (!m_impl)
+		return {};
+
 	return m_impl->GetResource({ resourceID, streamIndex });
 }
 
@@ -185,6 +214,9 @@ Buffer Bundle::GetBinary(ResourceID resourceID, MemoryType memoryType, uint8_t s
 
 std::optional<ResourceDebugData> Bundle::GetResourceDebugData(ResourceID resourceID, uint8_t streamIndex) const
 {
+	if (!m_impl)
+		return {};
+
 	const auto &internalDebugData = m_impl->GetResourceDebugData({ resourceID, streamIndex });
 	if (!internalDebugData)
 		return {};
@@ -194,56 +226,89 @@ std::optional<ResourceDebugData> Bundle::GetResourceDebugData(ResourceID resourc
 
 std::optional<uint32_t> Bundle::GetResourceType(ResourceID resourceID, uint8_t streamIndex) const
 {
+	if (!m_impl)
+		return {};
+
 	return m_impl->GetResourceType({ resourceID, streamIndex });
 }
 
 bool Bundle::AddResource(ResourceID resourceID, const Resource &resource, uint8_t streamIndex)
 {
+	if (!m_impl)
+		return false;
+
 	return m_impl->AddResource({ resourceID, streamIndex }, resource);
 }
 
 bool Bundle::AddResourceDebugData(ResourceID resourceID, const ResourceDebugData &debugData, uint8_t streamIndex)
 {
+	if (!m_impl)
+		return false;
+
 	return m_impl->AddResourceDebugData({ resourceID, streamIndex }, debugData.GetName(), debugData.GetTypeName());
 }
 
 bool Bundle::ReplaceResource(ResourceID resourceID, const Resource &resource, uint8_t streamIndex)
 {
+	if (!m_impl)
+		return false;
+
 	return m_impl->ReplaceResource({ resourceID, streamIndex }, resource);
 }
 
 uint32_t Bundle::GetResourceCount() const
 {
+	if (!m_impl)
+		return 0;
+
 	return m_impl->GetResourceCount();
 }
 
 std::vector<ResourceID> Bundle::GetResourceIDs() const
 {
+	if (!m_impl)
+		return {};
+
 	return m_impl->GetResourceIDs();
 }
 
 std::map<uint32_t, std::vector<ResourceID>> Bundle::GetResourceIDsByType() const
 {
+	if (!m_impl)
+		return {};
+
 	return m_impl->GetResourceIDsByType();
 }
 
 std::vector<uint8_t> Bundle::GetResourceStreamIndices(ResourceID resourceID) const
 {
+	if (!m_impl)
+		return {};
+
 	return m_impl->GetResourceStreamIndices(resourceID);
 }
 
 ResourceID Bundle::GetDefaultResourceID() const
 {
+	if (!m_impl)
+		return ResourceID(0);
+
 	return m_impl->GetDefaultResourceID();
 }
 
 int32_t Bundle::GetDefaultResourceStreamIndex() const
 {
+	if (!m_impl)
+		return -1;
+
 	return m_impl->GetDefaultResourceStreamIndex();
 }
 
 std::string Bundle::GetStreamName(uint8_t index) const
 {
+	if (!m_impl)
+		return "";
+
 	return m_impl->GetStreamName(index);
 }
 
@@ -265,6 +330,9 @@ bool Bundle::SetStreamName(uint8_t index, std::string_view name)
 
 std::vector<MemoryType> Bundle::GetMemoryTypes() const
 {
+	if (!m_impl)
+		return {};
+
 	return m_impl->GetMemoryTypes();
 }
 

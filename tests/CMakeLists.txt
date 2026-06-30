@@ -2,6 +2,9 @@ add_executable(libtub_tests main.cpp)
 
 target_link_libraries(libtub_tests PRIVATE libtub)
 target_compile_features(libtub_tests PRIVATE cxx_std_20)
+if(NOT LIBTUB_BUILD_PROJECT_SUPPORT)
+    target_compile_definitions(libtub_tests PRIVATE LIBTUB_SKIP_PROJECT_TESTS)
+endif()
 
 if(MSVC)
     target_compile_options(libtub_tests PRIVATE "/W4" "/Zc:throwingNew" "/EHsc")
@@ -17,7 +20,7 @@ endif()
 add_test(NAME libtub.tests COMMAND libtub_tests)
 
 set(LIBTUB_TEST_GAME_PATHS "" CACHE STRING "Pipe-separated game roots for the recursive libtub game scan test.")
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libbndl-extractor/CMakeLists.txt")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libbndl-extractor/third_party/libbndl/CMakeLists.txt")
     add_subdirectory(third_party/libbndl-extractor EXCLUDE_FROM_ALL)
 
     if(LIBTUB_TEST_GAME_PATHS)
@@ -32,4 +35,6 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libbndl-extractor/CMakeLists.
     endif()
 elseif(LIBTUB_TEST_GAME_PATHS)
     message(FATAL_ERROR "LIBTUB_TEST_GAME_PATHS was provided but tests/third_party/libbndl-extractor is not checked out.")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libbndl-extractor/CMakeLists.txt")
+    message(STATUS "Skipping libbndl-extractor test helper because its nested libbndl submodule is missing.")
 endif()

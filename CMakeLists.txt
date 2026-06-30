@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.28 FATAL_ERROR)
 
 project(libtub CXX C)
 
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 4.0)
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+endif()
+
 set(LIBTUB_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 include(CTest)

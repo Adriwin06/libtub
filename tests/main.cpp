@@ -1,4 +1,5 @@
 #include <libtub/bundle.hpp>
+#include <libtub/builder.hpp>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -151,12 +152,50 @@ namespace
 
 		return exportVerified && importedOk && verified;
 	}
+
+	bool TestBundleBuilder()
+	{
+		using namespace libtub;
+
+		BundleBuilder builder(Magic::Bnd2, 5, Platform::PC, Flags::HasDebugData);
+		builder.SetStreamName(0, "base");
+
+		const ResourceID resourceID("builder_resource");
+		const std::vector<uint8_t> bytes{ 0xBA, 0xAD, 0xF0, 0x0D };
+		if (!Expect(builder.AddResource(resourceID, ResourceType::NeedForSpeed::BinaryFile)
+				.MainMemory(std::span<const uint8_t>(bytes), 4)
+				.DebugData("builder_resource.bin", "BinaryFile")
+				.Commit(), "builder: failed to commit resource"))
+		{
+			return false;
+		}
+
+		if (!Expect(builder.SetDefaultResource(resourceID), "builder: failed to set default resource"))
+			return false;
+
+		const auto saved = builder.SaveToMemory();
+		if (!Expect(!saved.empty(), "builder: failed to serialize bundle"))
+			return false;
+
+		Bundle reloaded;
+		if (!Expect(reloaded.Load(std::span<const uint8_t>(saved)), "builder: failed to reload serialized bundle"))
+			return false;
+
+		bool ok = true;
+		ok &= Expect(reloaded.GetStreamName(0) == "base", "builder: stream name mismatch");
+		ok &= Expect(reloaded.GetDefaultResourceID() == resourceID, "builder: default resource mismatch");
+		ok &= ExpectBytes(reloaded.GetBinary(resourceID, MemoryType::MainMemory), bytes, "builder: main memory mismatch");
+		return ok;
+	}
 }
 
 int main()
 {
 	bool ok = true;
 	ok &= TestBnd2ImportRoundTrip();
+#ifndef LIBTUB_SKIP_PROJECT_TESTS
 	ok &= TestProjectRoundTrip();
+#endif
+	ok &= TestBundleBuilder();
 	return ok ? 0 : 1;
 }
