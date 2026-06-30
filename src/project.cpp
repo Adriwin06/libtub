@@ -144,6 +144,8 @@ namespace
 			return Platform::PSVita;
 		if (value == "wiiu")
 			return Platform::WiiU;
+		if (value == "pcx64")
+			return Platform::PCx64;
 
 		const auto numeric = ParseUnsignedScalar<uint16_t>(node);
 		if (!numeric)
@@ -166,6 +168,8 @@ namespace
 			return "psvita";
 		case Platform::WiiU:
 			return "wiiu";
+		case Platform::PCx64:
+			return "pcx64";
 		default:
 			return "unknown";
 		}

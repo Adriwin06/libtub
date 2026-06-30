@@ -10,6 +10,7 @@ LIBTUB_ENUM_PLATFORM(Xbox360, XBOX_360, 2)
 LIBTUB_ENUM_PLATFORM(PS3, PS3, 3)
 LIBTUB_ENUM_PLATFORM(PSVita, PS_VITA, 4)
 LIBTUB_ENUM_PLATFORM(WiiU, WII_U, 5)
+LIBTUB_ENUM_PLATFORM(PCx64, PC_X64, 6) // Burnout Paradise decompilation (64-bit PC). Uses the PC layout; BND2 v2 files store it as platform 4.
 #endif
 
 

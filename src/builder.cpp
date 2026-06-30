@@ -41,6 +41,11 @@ BundleProfile BundleProfiles::BurnoutParadisePS3()
 	return { Magic::Bnd2, 2, Platform::PS3, kBurnoutParadiseFlags };
 }
 
+BundleProfile BundleProfiles::BurnoutParadiseDecomp()
+{
+	return { Magic::Bnd2, 2, Platform::PCx64, kBurnoutParadiseFlags };
+}
+
 BundleProfile BundleProfiles::NeedForSpeedHotPursuitPC()
 {
 	return { Magic::Bnd2, 5, Platform::PC, Flags::HasDebugData };
