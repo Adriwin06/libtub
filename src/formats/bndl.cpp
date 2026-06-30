@@ -428,7 +428,7 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 		{
 			const auto &e = entry.second;
 
-			const auto &descriptor = e.descriptors[i];
+			const auto &descriptor = e.descriptors[*mappedBlock];
 
 			if (descriptor.onDiskSize > 0)
 			{

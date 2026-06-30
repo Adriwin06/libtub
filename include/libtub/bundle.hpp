@@ -304,6 +304,8 @@ namespace libtub
 		LIBTUB_EXPORT Bundle &operator=(Bundle &&other) noexcept;
 		LIBTUB_EXPORT ~Bundle();
 
+		[[nodiscard]] LIBTUB_EXPORT bool IsValid() const noexcept;
+
 		LIBTUB_EXPORT bool Load(const std::string &name);
 		LIBTUB_EXPORT bool Load(const std::filesystem::path &path);
 		LIBTUB_EXPORT bool Load(std::span<const uint8_t> data);
