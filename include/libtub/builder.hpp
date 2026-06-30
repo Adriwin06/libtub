@@ -18,6 +18,7 @@ namespace libtub
 		[[nodiscard]] LIBTUB_EXPORT BundleProfile BurnoutParadisePC();
 		[[nodiscard]] LIBTUB_EXPORT BundleProfile BurnoutParadiseXbox360();
 		[[nodiscard]] LIBTUB_EXPORT BundleProfile BurnoutParadisePS3();
+		[[nodiscard]] LIBTUB_EXPORT BundleProfile BurnoutParadiseDecomp();
 		[[nodiscard]] LIBTUB_EXPORT BundleProfile NeedForSpeedHotPursuitPC();
 		[[nodiscard]] LIBTUB_EXPORT BundleProfile BndlPC(uint16_t version = 5, Flags flags = Flags::HasDebugData);
 	}

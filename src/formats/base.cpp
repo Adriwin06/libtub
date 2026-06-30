@@ -265,12 +265,13 @@ bool Base::SetStreamName(uint8_t, const std::string &)
 std::vector<MemoryType> Base::GetMemoryTypes() const
 {
 	std::vector<MemoryType> types;
-	types.reserve((m_platform == Platform::PC || m_platform == Platform::Xbox360) ? 2 : 3);
+	types.reserve((m_platform == Platform::PC || m_platform == Platform::PCx64 || m_platform == Platform::Xbox360) ? 2 : 3);
 
 	types.emplace_back(MemoryType::MainMemory);
 	switch (m_platform)
 	{
 	case Platform::PC:
+	case Platform::PCx64:
 		types.emplace_back(MemoryType::Disposable);
 		break;
 	case Platform::Xbox360:
@@ -297,7 +298,7 @@ bool Base::IsValidPlatform() const
 
 std::endian Base::GetPlatformEndian() const
 {
-	if (m_platform == Platform::PC || m_platform == Platform::PSVita)
+	if (m_platform == Platform::PC || m_platform == Platform::PCx64 || m_platform == Platform::PSVita)
 		return std::endian::little;
 
 	return std::endian::big;

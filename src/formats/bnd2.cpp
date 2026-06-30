@@ -38,7 +38,14 @@ bool Bnd2::Load(binaryio::BinaryReader &reader)
 	}
 	else
 	{
-		m_platform = static_cast<Platform>(reader.Read<uint32_t>());
+		const auto rawPlatform = reader.Read<uint32_t>();
+
+		// The Burnout Paradise decompilation (64-bit PC) tags pre-v5 bundles with
+		// platform 4, which collides with PSVita's identifier (only valid in v5).
+		if (rawPlatform == 4)
+			m_platform = Platform::PCx64;
+		else
+			m_platform = static_cast<Platform>(rawPlatform);
 	}
 	if (!IsValidPlatform())
 		return false;
@@ -192,7 +199,9 @@ bool Bnd2::Save(binaryio::BinaryWriter &writer)
 	else
 	{
 		writer.Write<uint32_t>(m_version);
-		writer.Write<uint32_t>(m_platform);
+
+		// PCx64 (decomp) is identified on disk by platform 4 (see Load).
+		writer.Write<uint32_t>(m_platform == Platform::PCx64 ? 4 : static_cast<uint32_t>(m_platform));
 	}
 
 	auto rstPointerPos = writer.GetOffset();
@@ -488,11 +497,14 @@ std::vector<MemoryType> Bnd2::GetMemoryTypes() const
 bool Bnd2::IsValidPlatform() const
 {
 	bool valid = Base::IsValidPlatform();
+	if (valid)
+		return true;
 
-	if (m_version >= 5 && !valid)
+	if (m_version >= 5)
 		return (m_platform == Platform::PSVita || m_platform == Platform::WiiU);
 
-	return valid;
+	// The decompilation target is a PC-layout bundle, only seen pre-v5.
+	return m_platform == Platform::PCx64;
 }
 
 std::vector<ResourceKey> Bnd2::SortedDebugDataKeys() const
@@ -570,6 +582,7 @@ std::optional<uint8_t> Bnd2::MapFileBlockToLibBlock(uint8_t block) const
 			mappedType = MemoryType::Physical;
 			break;
 		case Platform::PC:
+		case Platform::PCx64:
 			mappedType = MemoryType::Disposable;
 			break;
 		case Platform::WiiU:

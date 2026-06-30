@@ -100,6 +100,7 @@ Available builder profiles:
 - `BundleProfiles::BurnoutParadisePC()`
 - `BundleProfiles::BurnoutParadiseXbox360()`
 - `BundleProfiles::BurnoutParadisePS3()`
+- `BundleProfiles::BurnoutParadiseDecomp()` (64-bit PC decompilation target; BND2 v2 tagged with platform `4`)
 - `BundleProfiles::NeedForSpeedHotPursuitPC()`
 - `BundleProfiles::BndlPC(version, flags)`
 
