@@ -1,0 +1,55 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/libtubTargets.cmake")
+
+if(NOT TARGET libtub::libtub AND TARGET libtub::core)
+	add_library(libtub::libtub INTERFACE IMPORTED)
+	target_link_libraries(libtub::libtub INTERFACE libtub::core)
+endif()
+
+function(_libtub_import_static_dependency target_name file_pattern)
+	if(TARGET "${target_name}")
+		return()
+	endif()
+
+	set(imported_configs "")
+	foreach(config_name DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+		file(GLOB dependency_files "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/libtub/deps/${config_name}/${file_pattern}")
+		if(dependency_files)
+			list(GET dependency_files 0 dependency_file)
+			list(APPEND imported_configs "${config_name}")
+			set("dependency_file_${config_name}" "${dependency_file}")
+		endif()
+	endforeach()
+
+	if(NOT imported_configs)
+		return()
+	endif()
+
+	add_library("${target_name}" STATIC IMPORTED)
+	foreach(config_name IN LISTS imported_configs)
+		set_property(TARGET "${target_name}" APPEND PROPERTY IMPORTED_CONFIGURATIONS "${config_name}")
+		set_target_properties("${target_name}" PROPERTIES "IMPORTED_LOCATION_${config_name}" "${dependency_file_${config_name}}")
+	endforeach()
+endfunction()
+
+_libtub_import_static_dependency(libtub::binaryio "binaryio*.lib")
+_libtub_import_static_dependency(libtub::zlib "z*.lib")
+_libtub_import_static_dependency(libtub::yaml-cpp "yaml*.lib")
+
+set(_libtub_static_dependencies "")
+foreach(dependency_target libtub::binaryio libtub::zlib libtub::yaml-cpp)
+	if(TARGET "${dependency_target}")
+		list(APPEND _libtub_static_dependencies "${dependency_target}")
+	endif()
+endforeach()
+
+if(_libtub_static_dependencies)
+	foreach(libtub_target libtub::core libtub::libtub)
+		if(TARGET "${libtub_target}")
+			set_property(TARGET "${libtub_target}" APPEND PROPERTY INTERFACE_LINK_LIBRARIES "${_libtub_static_dependencies}")
+		endif()
+	endforeach()
+endif()
+
+unset(_libtub_static_dependencies)

@@ -7,9 +7,10 @@
 - BNDL plus BND2 v2, v3, and v5 support through the imported `libbndl` 2025 parser/writer model.
 - Direct in-memory loading and saving, so callers do not need temp extraction just to inspect or transform a bundle.
 - A lean `libtub_core` target for parser/writer and builder use without the YAML project layer.
-- A `BundleBuilder` facade for tools that want to author resources without dealing with the lower-level `Resource` plumbing directly.
+- A `BundleBuilder` facade with common profiles and validation for tools that want to author resources without dealing with the lower-level `Resource` plumbing directly.
 - YAML project export/import inspired by YAP, but generalized for multistream bundles and non-pointer import kinds.
 - High-level `DescribeResources()` output that surfaces stream indices, debug data, imports, and per-memory binary metadata in one place.
+- Last-error reporting for the C and C++ APIs, so callers do not have to treat every failed `bool` as a generic parse error.
 - BND2 v5 setters for default-resource metadata and stream names so project round-trips can preserve more than raw payload bytes.
 - A cleaned-up standalone `libtub` target/namespace/header layout instead of leaving the project as a renamed upstream drop.
 
@@ -19,6 +20,11 @@
 - `libtub`: the full compatibility target. It includes `libtub_core` features plus YAML project import/export.
 
 Project import/export is controlled by `LIBTUB_BUILD_PROJECT_SUPPORT`, which defaults to `ON`.
+
+The build tree and installed package also expose namespaced aliases:
+
+- `libtub::core`
+- `libtub::libtub`
 
 ## Project layout
 
@@ -47,6 +53,13 @@ cmake -S . -B build
 cmake --build build --config Debug
 ```
 
+Installed consumers can use the generated package config:
+
+```cmake
+find_package(libtub CONFIG REQUIRED)
+target_link_libraries(my_tool PRIVATE libtub::libtub)
+```
+
 The library uses CMake `FetchContent` for:
 
 - `libbinaryio`
@@ -59,10 +72,11 @@ The library uses CMake `FetchContent` for:
 ```cpp
 #include <libtub/builder.hpp>
 #include <filesystem>
+#include <vector>
 
 int main()
 {
-	libtub::BundleBuilder builder(libtub::Magic::Bnd2, 5, libtub::Platform::PC, libtub::Flags::HasDebugData);
+	libtub::BundleBuilder builder(libtub::BundleProfiles::NeedForSpeedHotPursuitPC());
 	builder.SetStreamName(0, "base");
 
 	const std::vector<uint8_t> data{ 0x01, 0x02, 0x03, 0x04 };
@@ -81,20 +95,34 @@ int main()
 }
 ```
 
+Available builder profiles:
+
+- `BundleProfiles::BurnoutParadisePC()`
+- `BundleProfiles::BurnoutParadiseXbox360()`
+- `BundleProfiles::BurnoutParadisePS3()`
+- `BundleProfiles::NeedForSpeedHotPursuitPC()`
+- `BundleProfiles::BndlPC(version, flags)`
+
 Project export/import remains available through the full `libtub` target:
 
 ```cpp
 #include <libtub/bundle.hpp>
+#include <iostream>
 
 int main()
 {
 	libtub::Bundle bundle;
 	if (!bundle.Load("GLOBALB.LZC"))
+	{
+		std::cerr << bundle.GetLastErrorMessage() << '\n';
 		return 1;
+	}
 
 	return bundle.ExportProject("out/project") ? 0 : 2;
 }
 ```
+
+`bndl_util --pack <project-dir> --file <output>` can pack directories exported through `ExportProject()`. It refuses to overwrite existing output files. The older `_config.xml` extraction layout is still extract-only.
 
 ## Public API highlights
 
@@ -102,6 +130,8 @@ int main()
 - `bool Load(std::span<const uint8_t> data)`
 - `bool Save(const std::string &path)`
 - `std::vector<uint8_t> SaveToMemory()`
+- `ErrorCode GetLastErrorCode() const`
+- `const std::string &GetLastErrorMessage() const`
 - `std::vector<libtub::ResourceDescriptor> DescribeResources() const`
 - `bool ExportProject(const std::filesystem::path &, const ProjectExportOptions &) const`
 - `bool ImportProject(const std::filesystem::path &)`

@@ -56,14 +56,15 @@ Buffer Base::GetBinary(ResourceKey resourceKey, MemoryType memoryType) const
 	if (m_flags & Flags::Compressed)
 	{
 		uLongf uncompressedSizeLong = uncompressedSize;
-		[[maybe_unused]] const auto ret = uncompress(uncompressedBuffer.get(), &uncompressedSizeLong, buffer.get(), static_cast<uLong>(dataInfo.onDiskSize));
+		const auto ret = uncompress(uncompressedBuffer.get(), &uncompressedSizeLong, buffer.get(), static_cast<uLong>(dataInfo.onDiskSize));
 
-		assert(ret == Z_OK);
-		assert(uncompressedSize == uncompressedSizeLong);
+		if (ret != Z_OK || uncompressedSize != uncompressedSizeLong)
+			return {};
 	}
 	else
 	{
-		assert(dataInfo.onDiskSize == dataInfo.uncompressedSize);
+		if (dataInfo.onDiskSize != dataInfo.uncompressedSize)
+			return {};
 
 		std::memcpy(uncompressedBuffer.get(), buffer.get(), uncompressedSize);
 	}
@@ -171,16 +172,16 @@ bool Base::ReplaceResource(ResourceKey resourceKey, const Resource &resource)
 
 		if (m_flags & Flags::Compressed)
 		{
+			if (inSize > std::numeric_limits<uLong>::max())
+				return false;
+
 			const auto compBufferSize = compressBound(static_cast<uLong>(inSize));
 			std::vector<uint8_t> compBuffer(compBufferSize);
 			uLongf actualSize = compBufferSize;
 			const auto ret = compress2(compBuffer.data(), &actualSize, inBuffer.get(), static_cast<uLong>(inSize), Z_BEST_COMPRESSION);
 
 			if (ret != Z_OK)
-			{
-				assert(0);
 				return false;
-			}
 
 			outBuffer = std::make_unique_for_overwrite<uint8_t[]>(actualSize);
 			std::memcpy(outBuffer.get(), compBuffer.data(), actualSize);

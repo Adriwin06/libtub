@@ -377,14 +377,54 @@ int main(int argc, char** argv)
 			return EXIT_FAILURE;
 		}
 
-		const auto configPath = packDir / "_config.xml";
-		if (!std::filesystem::is_regular_file(configPath) && !std::filesystem::is_symlink(configPath))
+		const auto outputPath = std::filesystem::path(file.value());
+		if (std::filesystem::exists(outputPath))
 		{
-			std::cout << "Could not find a _config.xml file in the directory to pack." << std::endl;
+			std::cout << "Refusing to overwrite existing output file " << outputPath.string() << std::endl;
 			return EXIT_FAILURE;
 		}
 
-		// TODO: check for overwrite?
+		const auto projectMetadataPath = packDir / ".meta.yaml";
+		if (std::filesystem::is_regular_file(projectMetadataPath) || std::filesystem::is_symlink(projectMetadataPath))
+		{
+#ifdef LIBTUB_HAS_PROJECT_SUPPORT
+			if (!arch.ImportProject(packDir))
+			{
+				std::cout << "Failed to import project metadata";
+				const auto error = arch.GetLastErrorMessage();
+				if (!error.empty())
+					std::cout << ": " << error;
+				std::cout << std::endl;
+				return EXIT_FAILURE;
+			}
+
+			if (!arch.Save(outputPath))
+			{
+				std::cout << "Failed to write bundle";
+				const auto error = arch.GetLastErrorMessage();
+				if (!error.empty())
+					std::cout << ": " << error;
+				std::cout << std::endl;
+				return EXIT_FAILURE;
+			}
+
+			std::cout << "Packed " << packDir.string() << " to " << outputPath.string() << std::endl;
+			return EXIT_SUCCESS;
+#else
+			std::cout << "This build of bndl_util was compiled without project import support." << std::endl;
+			return EXIT_FAILURE;
+#endif
+		}
+
+		const auto configPath = packDir / "_config.xml";
+		if (std::filesystem::is_regular_file(configPath) || std::filesystem::is_symlink(configPath))
+		{
+			std::cout << "Legacy _config.xml packing is not implemented. Export a libtub project with .meta.yaml and pack that directory instead." << std::endl;
+			return EXIT_FAILURE;
+		}
+
+		std::cout << "Could not find a .meta.yaml project file in the directory to pack." << std::endl;
+		return EXIT_FAILURE;
 	}
 
 	return 0;

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28 FATAL_ERROR)
 
-project(libtub CXX C)
+project(libtub VERSION 0.1.0 LANGUAGES CXX C)
 
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 4.0)
     set(CMAKE_POLICY_VERSION_MINIMUM 3.5)

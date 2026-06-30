@@ -34,6 +34,30 @@ namespace libtub
 {
 	namespace Formats { class Base; }
 
+	enum class ErrorCode : uint8_t
+	{
+		Success,
+		InvalidBundle,
+		InvalidMagic,
+		InvalidPath,
+		IoError,
+		InvalidState,
+		UnsupportedFormat,
+		UnsupportedPlatform,
+		UnsupportedVersion,
+		UnsupportedFlags,
+		ResourceNotFound,
+		DebugDataNotFound,
+		OutOfRange,
+		InvalidProject,
+		CompressionFailed,
+		DecompressionFailed,
+		ValidationFailed,
+		MemoryAllocation,
+		InvalidArgument,
+		GenericFailure,
+	};
+
 	enum class Magic : uint8_t
 	{
 #define LIBTUB_ENUM_MAGIC(name, _, value) name = value,
@@ -305,6 +329,9 @@ namespace libtub
 		LIBTUB_EXPORT ~Bundle();
 
 		[[nodiscard]] LIBTUB_EXPORT bool IsValid() const noexcept;
+		[[nodiscard]] LIBTUB_EXPORT ErrorCode GetLastErrorCode() const noexcept;
+		[[nodiscard]] LIBTUB_EXPORT const std::string &GetLastErrorMessage() const noexcept;
+		LIBTUB_EXPORT void ClearLastError() const;
 
 		LIBTUB_EXPORT bool Load(const std::string &name);
 		LIBTUB_EXPORT bool Load(const std::filesystem::path &path);
@@ -349,6 +376,11 @@ namespace libtub
 		LIBTUB_EXPORT bool ImportProject(const std::filesystem::path &directory);
 
 	private:
+		LIBTUB_EXPORT void SetLastError(ErrorCode code, std::string message) const;
+		LIBTUB_EXPORT bool Fail(ErrorCode code, std::string message) const;
+
 		std::unique_ptr<Formats::Base> m_impl;
+		mutable ErrorCode m_lastErrorCode = ErrorCode::Success;
+		mutable std::string m_lastErrorMessage;
 	};
 }

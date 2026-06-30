@@ -10,9 +10,16 @@ if(MSVC)
     target_compile_options(libtub_tests PRIVATE "/W4" "/Zc:throwingNew" "/EHsc")
 endif()
 
-if(WIN32)
+if(WIN32 AND BUILD_SHARED_LIBS)
+    set(LIBTUB_TEST_RUNTIME_DLLS $<TARGET_RUNTIME_DLLS:libtub_tests>)
+    if(TARGET yaml-cpp)
+        list(APPEND LIBTUB_TEST_RUNTIME_DLLS $<TARGET_FILE:yaml-cpp>)
+    elseif(TARGET yaml-cpp::yaml-cpp)
+        list(APPEND LIBTUB_TEST_RUNTIME_DLLS $<TARGET_FILE:yaml-cpp::yaml-cpp>)
+    endif()
+
     add_custom_command(TARGET libtub_tests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:libtub_tests> $<TARGET_FILE_DIR:libtub_tests>
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBTUB_TEST_RUNTIME_DLLS} $<TARGET_FILE_DIR:libtub_tests>
         COMMAND_EXPAND_LISTS
     )
 endif()

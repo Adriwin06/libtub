@@ -1,5 +1,7 @@
 include(FetchContent)
 include(GenerateExportHeader)
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 option(LIBTUB_BUILD_PROJECT_SUPPORT "Build YAML project import/export support" ON)
@@ -75,16 +77,23 @@ if(LIBTUB_BUILD_PROJECT_SUPPORT)
 endif()
 
 function(configure_libtub_library target_name)
-    target_link_libraries(${target_name} PRIVATE binaryio ZLIB::ZLIB)
+    target_link_libraries(${target_name} PRIVATE
+        $<BUILD_LOCAL_INTERFACE:binaryio>
+        $<BUILD_LOCAL_INTERFACE:ZLIB::ZLIB>
+    )
     if(TARGET pugixml::pugixml)
-        target_link_libraries(${target_name} PRIVATE pugixml::pugixml)
+        target_link_libraries(${target_name} PRIVATE $<BUILD_LOCAL_INTERFACE:pugixml::pugixml>)
     else()
         target_include_directories(${target_name} SYSTEM PRIVATE ${pugixml_SOURCE_DIR}/src)
         target_compile_definitions(${target_name} PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
     endif()
 
     target_compile_features(${target_name} PUBLIC c_std_11 cxx_std_20)
-    target_include_directories(${target_name} PUBLIC ${LIBTUB_ROOT}/include ${CMAKE_CURRENT_BINARY_DIR}/include)
+    target_include_directories(${target_name} PUBLIC
+        $<BUILD_INTERFACE:${LIBTUB_ROOT}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    )
 
     if(NOT BUILD_SHARED_LIBS)
         target_compile_definitions(${target_name} PUBLIC LIBTUB_STATIC_DEFINE)
@@ -102,37 +111,102 @@ endfunction()
 
 add_library(libtub_core ${LIBTUB_CORE_SOURCES})
 configure_libtub_library(libtub_core)
-set_target_properties(libtub_core PROPERTIES OUTPUT_NAME "libtub_core")
-target_sources(libtub_core PUBLIC FILE_SET HEADERS
-                                  BASE_DIRS "${HEADER_DIR}"
-                                  FILES "${PUBLIC_HEADERS}")
+set_target_properties(libtub_core PROPERTIES OUTPUT_NAME "libtub_core"
+                                             EXPORT_NAME core)
 generate_export_header(libtub_core
     EXPORT_MACRO_NAME LIBTUB_EXPORT
     EXPORT_FILE_NAME include/libtub/internal/export.h
 )
+target_sources(libtub_core PUBLIC FILE_SET HEADERS
+                                  BASE_DIRS "${LIBTUB_ROOT}/include" "${CMAKE_CURRENT_BINARY_DIR}/include"
+                                  FILES "${PUBLIC_HEADERS}" "${CMAKE_CURRENT_BINARY_DIR}/include/libtub/internal/export.h")
+add_library(libtub::core ALIAS libtub_core)
 
 set(LIBTUB_INSTALL_TARGETS libtub_core)
 
 if(LIBTUB_BUILD_PROJECT_SUPPORT)
     add_library(libtub ${LIBTUB_CORE_SOURCES} ${LIBTUB_PROJECT_SOURCES})
     configure_libtub_library(libtub)
+    set_target_properties(libtub PROPERTIES EXPORT_NAME libtub)
     target_compile_definitions(libtub PRIVATE libtub_core_EXPORTS)
 
     if(TARGET yaml-cpp::yaml-cpp)
-        target_link_libraries(libtub PRIVATE yaml-cpp::yaml-cpp)
+        get_target_property(LIBTUB_YAML_ALIASED_TARGET yaml-cpp::yaml-cpp ALIASED_TARGET)
+        if(LIBTUB_YAML_ALIASED_TARGET)
+            set(LIBTUB_YAML_TARGET ${LIBTUB_YAML_ALIASED_TARGET})
+        else()
+            set(LIBTUB_YAML_TARGET yaml-cpp::yaml-cpp)
+        endif()
     else()
-        target_link_libraries(libtub PRIVATE yaml-cpp)
+        set(LIBTUB_YAML_TARGET yaml-cpp)
+    endif()
+
+    add_dependencies(libtub ${LIBTUB_YAML_TARGET})
+    target_include_directories(libtub SYSTEM PRIVATE $<TARGET_PROPERTY:${LIBTUB_YAML_TARGET},INTERFACE_INCLUDE_DIRECTORIES>)
+    target_link_libraries(libtub PRIVATE $<BUILD_LOCAL_INTERFACE:$<TARGET_LINKER_FILE:${LIBTUB_YAML_TARGET}>>)
+    if(BUILD_SHARED_LIBS)
+        set_property(TARGET libtub PROPERTY INTERFACE_LINK_LIBRARIES "")
+    else()
+        target_compile_definitions(libtub PRIVATE YAML_CPP_STATIC_DEFINE)
+    endif()
+
+    if(BUILD_SHARED_LIBS)
+        install(FILES $<TARGET_FILE:${LIBTUB_YAML_TARGET}> TYPE BIN OPTIONAL)
     endif()
 
     list(APPEND LIBTUB_INSTALL_TARGETS libtub)
+    add_library(libtub::libtub ALIAS libtub)
 else()
     add_library(libtub ALIAS libtub_core)
+    add_library(libtub::libtub ALIAS libtub_core)
 endif()
 
-install(TARGETS libtub_core FILE_SET HEADERS)
-if(LIBTUB_BUILD_PROJECT_SUPPORT)
-    install(TARGETS libtub)
+if(NOT BUILD_SHARED_LIBS)
+    set(LIBTUB_STATIC_DEPENDENCY_TARGETS binaryio)
+    if(TARGET zlibstatic)
+        list(APPEND LIBTUB_STATIC_DEPENDENCY_TARGETS zlibstatic)
+    elseif(TARGET ZLIB::ZLIB)
+        list(APPEND LIBTUB_STATIC_DEPENDENCY_TARGETS ZLIB::ZLIB)
+    endif()
+    if(DEFINED LIBTUB_YAML_TARGET)
+        list(APPEND LIBTUB_STATIC_DEPENDENCY_TARGETS ${LIBTUB_YAML_TARGET})
+    endif()
+
+    foreach(dependency_target IN LISTS LIBTUB_STATIC_DEPENDENCY_TARGETS)
+        install(FILES $<TARGET_FILE:${dependency_target}>
+                DESTINATION ${CMAKE_INSTALL_LIBDIR}/libtub/deps/$<CONFIG>
+                OPTIONAL)
+    endforeach()
 endif()
+
+install(TARGETS ${LIBTUB_INSTALL_TARGETS}
+    EXPORT libtubTargets
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    FILE_SET HEADERS DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+set(LIBTUB_INSTALL_CMAKEDIR ${CMAKE_INSTALL_LIBDIR}/cmake/libtub)
+configure_package_config_file(
+    ${LIBTUB_ROOT}/cmake/libtubConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/libtubConfig.cmake
+    INSTALL_DESTINATION ${LIBTUB_INSTALL_CMAKEDIR}
+)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/libtubConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(EXPORT libtubTargets
+    NAMESPACE libtub::
+    DESTINATION ${LIBTUB_INSTALL_CMAKEDIR}
+)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/libtubConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/libtubConfigVersion.cmake
+    DESTINATION ${LIBTUB_INSTALL_CMAKEDIR}
+)
 
 if(CMAKE_CXX_LINKER_SUPPORTS_PDB AND BUILD_SHARED_LIBS)
     foreach(target_name IN LISTS LIBTUB_INSTALL_TARGETS)
@@ -140,7 +214,6 @@ if(CMAKE_CXX_LINKER_SUPPORTS_PDB AND BUILD_SHARED_LIBS)
     endforeach()
 endif()
 
-include(GNUInstallDirs) # `TYPE DOC` behaviour changes(!) when GNUInstallDirs is included
 install(FILES ${LIBTUB_ROOT}/LICENSE.md TYPE DOC RENAME copyright)
 install(FILES ${LIBTUB_ROOT}/NOTICE.libbndl.md TYPE DOC)
 

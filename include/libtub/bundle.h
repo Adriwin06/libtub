@@ -38,6 +38,9 @@ extern "C"
 		LIBTUB_ERROR_RESOURCE_NOT_FOUND = 3,
 		LIBTUB_ERROR_DEBUG_DATA_NOT_FOUND = 4,
 		LIBTUB_ERROR_OUT_OF_RANGE = 5,
+		LIBTUB_ERROR_INVALID_PROJECT = 6,
+		LIBTUB_ERROR_DECOMPRESSION_FAILED = 7,
+		LIBTUB_ERROR_INVALID_ARGUMENT = 8,
 
 		LIBTUB_ERROR_MEMORY_ALLOCATION = -1,
 	} libtub_error;
@@ -71,6 +74,8 @@ extern "C"
 	LIBTUB_EXPORT void libtub_free(libtub_bundle *LIBTUB_NULLABLE bundle);
 
 	LIBTUB_EXPORT libtub_error libtub_save(libtub_bundle *LIBTUB_NONNULL bundle, const char *LIBTUB_NONNULL path);
+	LIBTUB_EXPORT libtub_error libtub_get_last_error_code(const libtub_bundle *LIBTUB_NONNULL bundle);
+	LIBTUB_EXPORT libtub_error libtub_get_last_error_message(const libtub_bundle *LIBTUB_NONNULL bundle, char *LIBTUB_NONNULL buffer, size_t length);
 
 	LIBTUB_EXPORT libtub_magic libtub_get_magic(const libtub_bundle *LIBTUB_NONNULL bundle);
 	LIBTUB_EXPORT uint16_t libtub_get_version(const libtub_bundle *LIBTUB_NONNULL bundle);

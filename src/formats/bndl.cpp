@@ -53,7 +53,8 @@ bool Bndl::Load(binaryio::BinaryReader &reader)
 	reader.Skip<uint32_t>(); // import block
 	reader.Skip<uint32_t>(); // start of data block
 
-	reader.Verify(static_cast<uint32_t>(m_platform));
+	if (reader.Read<uint32_t>() != static_cast<uint32_t>(m_platform))
+		return false;
 
 	auto compressed = 0U;
 	auto uncompInfoOffset = 0U;
@@ -99,8 +100,8 @@ bool Bndl::Load(binaryio::BinaryReader &reader)
 			const auto mappedBlock = MapFileBlockToLibBlock(j);
 			if (!mappedBlock)
 			{
-				reader.Verify<uint32_t>(0); // size
-				reader.Verify<uint32_t>(1); // alignment
+				reader.Skip<uint32_t>(); // size
+				reader.Skip<uint32_t>(); // alignment
 			}
 			else
 			{
@@ -128,7 +129,6 @@ bool Bndl::Load(binaryio::BinaryReader &reader)
 			const auto mappedBlock = MapFileBlockToLibBlock(j);
 			if (!mappedBlock)
 			{
-				assert(dataBlockSizes[j] == 0);
 				continue;
 			}
 
@@ -160,8 +160,8 @@ bool Bndl::Load(binaryio::BinaryReader &reader)
 				const auto mappedBlock = MapFileBlockToLibBlock(j);
 				if (!mappedBlock)
 				{
-					reader.Verify<uint32_t>(0); // size
-					reader.Verify<uint32_t>(1); // alignment
+					reader.Skip<uint32_t>(); // size
+					reader.Skip<uint32_t>(); // alignment
 				}
 				else
 				{
@@ -181,7 +181,7 @@ bool Bndl::Load(binaryio::BinaryReader &reader)
 
 		reader.Seek(depOffset);
 		e.importCount = static_cast<uint16_t>(reader.Read<uint32_t>());
-		reader.Verify<uint32_t>(0);
+		reader.Skip<uint32_t>(); // padding
 		for (auto i = 0U; i < e.importCount; i++)
 			m_imports[resourceID].emplace_back(ReadImport(reader));
 	}
@@ -310,7 +310,7 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 		const auto data = stream.view();
 		const auto dataSize = data.size();
 
-		auto &e = m_entries[{ ResourceID(0xFFFFFFFF), static_cast<uint8_t>(0) }]; // HACK
+		auto &e = m_entries[{ ResourceID(0xC039284A), static_cast<uint8_t>(0) }];
 		e.resourceType = ResourceType::Burnout::TextFile;
 
 		e.descriptors[0].data = std::make_unique_for_overwrite<uint8_t[]>(dataSize);
@@ -438,12 +438,14 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 		}
 
 		const auto size = writer.GetOffset32() - blockStartOffset;
-		writer.VisitAndWrite<uint32_t>(dataBlockDescriptorsPos[*mappedBlock], size);
-		writer.VisitAndWrite<uint32_t>(dataBlockDescriptorsPos[*mappedBlock], (size == 0) ? 1 : ((*mappedBlock >= 1) ? 4096 : 1024)); // TODO: This changes and I don't know the pattern.
+		auto dataBlockSizePos = dataBlockDescriptorsPos[*mappedBlock];
+		auto dataBlockAlignmentPos = dataBlockSizePos + sizeof(uint32_t);
+		writer.VisitAndWrite<uint32_t>(dataBlockSizePos, size);
+		writer.VisitAndWrite<uint32_t>(dataBlockAlignmentPos, (size == 0) ? 1 : ((*mappedBlock >= 1) ? 4096 : 1024)); // TODO: This changes and I don't know the pattern.
 		blockStartOffset = writer.GetOffset32();
 	}
 
-	m_entries.erase({ ResourceID(0xFFFFFFFF), static_cast<uint8_t>(0) });
+	m_entries.erase({ ResourceID(0xC039284A), static_cast<uint8_t>(0) });
 
 	return true;
 }
