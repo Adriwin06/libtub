@@ -83,6 +83,10 @@ namespace libtub
 		public:
 			Base() = default;
 			Base(uint16_t version, Platform platform, Flags flags);
+			Base(const Base &) = delete;
+			Base &operator=(const Base &) = delete;
+			Base(Base &&) = delete;
+			Base &operator=(Base &&) = delete;
 			virtual ~Base() = default;
 
 			virtual ErrorCode Load(binaryio::BinaryReader &reader) = 0;
@@ -133,12 +137,12 @@ namespace libtub
 			Platform m_platform;
 			Flags m_flags;
 
-			virtual constexpr bool AppendsImportsToResource() const = 0;
+			[[nodiscard]] virtual constexpr bool AppendsImportsToResource() const = 0;
 			// Called by ReplaceResource for formats that keep imports outside the resource payload.
 			virtual void StoreSeparateImports(ResourceKey, const std::vector<Import> &) {}
-			virtual bool IsValidPlatform() const;
+			[[nodiscard]] virtual bool IsValidPlatform() const;
 
-			std::endian GetPlatformEndian() const;
+			[[nodiscard]] std::endian GetPlatformEndian() const;
 
 			// Decompresses (or copies) one stored block. Unlike an empty buffer, nothing means the block holds
 			// data that could not be decoded.
@@ -148,8 +152,8 @@ namespace libtub
 			[[nodiscard]] std::string GenerateDebugData() const;
 			// Writes the NUL-terminated resource string table.
 			void WriteDebugData(binaryio::BinaryWriter &writer) const;
-			virtual std::vector<ResourceKey> SortedDebugDataKeys() const;
-			virtual std::vector<std::pair<std::string, std::string>> GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugDataEntry &debugData) const;
+			[[nodiscard]] virtual std::vector<ResourceKey> SortedDebugDataKeys() const;
+			[[nodiscard]] virtual std::vector<std::pair<std::string, std::string>> GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugDataEntry &debugData) const;
 
 			[[nodiscard]] static ImportEntry ReadImport(binaryio::BinaryReader &reader);
 			static void WriteImport(binaryio::BinaryWriter &writer, const Import &import);

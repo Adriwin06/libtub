@@ -18,12 +18,6 @@
 #	define LIBTUB_BUFFER_CONSTEXPR
 #endif
 
-#if __cpp_constexpr >= 202207L
-#	define LIBTUB_DEFAULT_MOVE_CONSTEXPR constexpr
-#else
-#	define LIBTUB_DEFAULT_MOVE_CONSTEXPR
-#endif
-
 #ifdef __cpp_lib_to_underlying
 #	define LIBTUB_TO_UNDERLYING(x) std::to_underlying(x)
 #else
@@ -60,14 +54,14 @@ namespace libtub
 
 	enum class Magic : uint8_t
 	{
-#define LIBTUB_ENUM_MAGIC(name, _, value) name = value,
+#define LIBTUB_ENUM_MAGIC(name, _, value) name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_MAGIC
 	};
 
 	enum class Platform : uint16_t
 	{
-#define LIBTUB_ENUM_PLATFORM(name, _, value) name = value,
+#define LIBTUB_ENUM_PLATFORM(name, _, value) name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_PLATFORM
 	};
@@ -78,7 +72,7 @@ namespace libtub
 		{
 			enum : uint32_t
 			{
-#define LIBTUB_ENUM_RESOURCE_TYPE_BURNOUT(name, _, value) name = value,
+#define LIBTUB_ENUM_RESOURCE_TYPE_BURNOUT(name, _, value) name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_RESOURCE_TYPE_BURNOUT
 			};
@@ -88,7 +82,7 @@ namespace libtub
 		{
 			enum : uint32_t
 			{
-#define LIBTUB_ENUM_RESOURCE_TYPE_NFS(name, _, value) name = value,
+#define LIBTUB_ENUM_RESOURCE_TYPE_NFS(name, _, value) name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_RESOURCE_TYPE_NFS
 			};
@@ -97,7 +91,7 @@ namespace libtub
 
 	enum class MemoryType : uint8_t
 	{
-#define LIBTUB_ENUM_MEMORY_TYPE(name, _, value) name = value,
+#define LIBTUB_ENUM_MEMORY_TYPE(name, _, value) name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_MEMORY_TYPE
 	};
@@ -108,7 +102,7 @@ namespace libtub
 		using UnderlyingType = uint32_t;
 		enum class Values : UnderlyingType
 		{
-#define LIBTUB_ENUM_FLAGS(name, _, value) name = value,
+#define LIBTUB_ENUM_FLAGS(name, _, value) name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_FLAGS
 		};
@@ -118,7 +112,6 @@ namespace libtub
 
 		constexpr Flags() noexcept : m_value(0) {}
 		constexpr Flags(Values flag) noexcept : m_value(LIBTUB_TO_UNDERLYING(flag)) {}
-		constexpr Flags(const Flags &flags) noexcept = default;
 		constexpr explicit Flags(UnderlyingType flags) noexcept : m_value(flags) {}
 
 		[[nodiscard]] constexpr bool operator==(const Flags &flags) const noexcept = default;
@@ -169,7 +162,7 @@ namespace libtub
 	public:
 		enum class IDType : uint8_t
 		{
-#define LIBTUB_ENUM_ID_TYPE(name, _, value) name = value,
+#define LIBTUB_ENUM_ID_TYPE(name, _, value) name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_ID_TYPE
 		};
@@ -215,7 +208,7 @@ namespace libtub
 	public:
 		enum class ImportType : uint8_t
 		{
-#define LIBTUB_ENUM_IMPORT_TYPE(name, _, value) name = value,
+#define LIBTUB_ENUM_IMPORT_TYPE(name, _, value) name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_IMPORT_TYPE
 		};
@@ -245,8 +238,18 @@ namespace libtub
 		using const_iterator = const value_type *;
 
 		constexpr Buffer() noexcept : m_ptr({}), m_size(0), m_alignment(0) {}
-		Buffer(std::unique_ptr<value_type[]> ptr, size_type size, uint32_t alignment) noexcept : m_ptr(std::move(ptr)), m_size(size), m_alignment(alignment) {}
-		LIBTUB_DEFAULT_MOVE_CONSTEXPR Buffer(Buffer &&other) noexcept = default;
+		LIBTUB_BUFFER_CONSTEXPR Buffer(std::unique_ptr<value_type[]> ptr, size_type size, uint32_t alignment) noexcept : m_ptr(std::move(ptr)), m_size(size), m_alignment(alignment) {}
+		constexpr Buffer(const Buffer &) = delete;
+		constexpr Buffer &operator=(const Buffer &) = delete;
+		LIBTUB_BUFFER_CONSTEXPR Buffer(Buffer &&) noexcept = default;
+		LIBTUB_BUFFER_CONSTEXPR Buffer &operator=(Buffer &&buffer) noexcept
+		{
+			m_ptr = std::move(buffer.m_ptr);
+			m_size = buffer.m_size;
+			m_alignment = buffer.m_alignment;
+			return *this;
+		}
+		LIBTUB_BUFFER_CONSTEXPR ~Buffer() = default;
 
 		[[nodiscard]] constexpr size_type GetSize() const noexcept { return m_size; }
 		[[nodiscard]] constexpr uint32_t GetAlignment() const noexcept { return m_alignment; }
@@ -259,14 +262,6 @@ namespace libtub
 
 		[[nodiscard]] LIBTUB_BUFFER_CONSTEXPR bool operator==(std::nullptr_t) const noexcept { return m_ptr.get() == nullptr; }
 		[[nodiscard]] LIBTUB_BUFFER_CONSTEXPR reference operator[](size_type idx) const { return m_ptr[idx]; }
-
-		Buffer &operator=(Buffer &&buffer) noexcept
-		{
-			m_ptr = std::move(buffer.m_ptr);
-			m_size = buffer.m_size;
-			m_alignment = buffer.m_alignment;
-			return *this;
-		}
 
 	private:
 		std::unique_ptr<value_type[]> m_ptr;
@@ -286,7 +281,7 @@ namespace libtub
 		[[nodiscard]] constexpr uint32_t GetResourceType() const noexcept { return m_resourceType; }
 
 		void ReplaceBinary(MemoryType block, Buffer &&buffer) { m_buffers[LIBTUB_TO_UNDERLYING(block)] = std::move(buffer); }
-		void AddImport(Import import) { m_imports.emplace_back(std::move(import)); }
+		void AddImport(Import import) { m_imports.emplace_back(import); }
 
 	private:
 		std::array<Buffer, 4> m_buffers;

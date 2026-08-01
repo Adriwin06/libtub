@@ -1,7 +1,7 @@
 #pragma once
 #include <libtub/bundle.hpp>
 
-inline std::map<uint32_t, std::string> g_burnoutFileTypeNames = {
+inline const std::map<uint32_t, std::string> g_burnoutFileTypeNames = {
 	{ libtub::ResourceType::Burnout::Texture, "Texture" },
 	{ libtub::ResourceType::Burnout::Material, "Material" },
 	{ libtub::ResourceType::Burnout::RenderableMesh, "RenderableMesh" },
@@ -123,7 +123,7 @@ inline std::map<uint32_t, std::string> g_burnoutFileTypeNames = {
 	{ libtub::ResourceType::Burnout::BkSoundBulletImpactStream, "BkSoundBulletImpactStream" },
 };
 
-inline std::map<uint32_t, std::string> g_nfsFileTypeNames = {
+inline const std::map<uint32_t, std::string> g_nfsFileTypeNames = {
 	{ libtub::ResourceType::NeedForSpeed::Texture, "Texture" },
 	{ libtub::ResourceType::NeedForSpeed::Material, "Material" },
 	{ libtub::ResourceType::NeedForSpeed::VertexDescriptor, "VertexDescriptor" },

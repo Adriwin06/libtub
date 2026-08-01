@@ -10,18 +10,18 @@ namespace libtub
 		public:
 			using Base::Base;
 
-			virtual ErrorCode Load(binaryio::BinaryReader &reader) override;
-			virtual ErrorCode Save(binaryio::BinaryWriter &writer) override;
+			ErrorCode Load(binaryio::BinaryReader &reader) override;
+			ErrorCode Save(binaryio::BinaryWriter &writer) override;
 
-			[[nodiscard]] virtual constexpr Magic GetMagic() const override { return Magic::Bndl; }
+			[[nodiscard]] constexpr Magic GetMagic() const override { return Magic::Bndl; }
 
-			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceKey resourceKey) const override;
+			[[nodiscard]] std::optional<Resource> GetResource(ResourceKey resourceKey) const override;
 
 		private:
 			std::map<ResourceID, std::vector<ImportEntry>> m_imports;
 
-			virtual constexpr bool AppendsImportsToResource() const override { return false; }
-			virtual void StoreSeparateImports(ResourceKey resourceKey, const std::vector<Import> &imports) override;
+			[[nodiscard]] constexpr bool AppendsImportsToResource() const override { return false; }
+			void StoreSeparateImports(ResourceKey resourceKey, const std::vector<Import> &imports) override;
 
 			[[nodiscard]] std::optional<uint8_t> MapFileBlockToLibBlock(uint8_t block) const;
 		};

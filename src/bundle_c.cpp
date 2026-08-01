@@ -355,7 +355,7 @@ libtub_error libtub_get_resource_type(const libtub_bundle *LIBTUB_NONNULL bundle
 struct libtub_buffer : public Buffer
 {
 	using Buffer::Buffer;
-	LIBTUB_DEFAULT_MOVE_CONSTEXPR libtub_buffer(Buffer &&buffer) : Buffer(std::move(buffer)) {}
+	LIBTUB_BUFFER_CONSTEXPR libtub_buffer(Buffer &&buffer) : Buffer(std::move(buffer)) {}
 };
 
 libtub_error libtub_buffer_create(libtub_buffer *LIBTUB_NULLABLE *LIBTUB_NONNULL buffer, const void *LIBTUB_NONNULL data, size_t size, uint32_t alignment)
@@ -436,7 +436,7 @@ uint32_t libtub_buffer_get_alignment(const libtub_buffer *LIBTUB_NONNULL buffer)
 struct libtub_import : public Import
 {
 	using Import::Import;
-	constexpr libtub_import(Import &&import) : Import(std::move(import)) {}
+	constexpr libtub_import(const Import &import) : Import(import) {}
 };
 
 libtub_error libtub_import_create(libtub_import *LIBTUB_NULLABLE *LIBTUB_NONNULL import, libtub_resource_id resourceID, uint32_t offset, libtub_import_type importType)
@@ -489,7 +489,7 @@ libtub_import_type libtub_import_get_import_type(const libtub_import *LIBTUB_NON
 struct libtub_resource : public Resource
 {
 	using Resource::Resource;
-	LIBTUB_DEFAULT_MOVE_CONSTEXPR libtub_resource(Resource &&resource) : Resource(std::move(resource)) {}
+	libtub_resource(Resource &&resource) : Resource(std::move(resource)) {}
 };
 
 libtub_error libtub_resource_create(libtub_resource *LIBTUB_NULLABLE *LIBTUB_NONNULL resource, libtub_resource_type resourceType)
@@ -570,7 +570,7 @@ libtub_error libtub_resource_copy_import(const libtub_resource *LIBTUB_NONNULL r
 	if (index >= imports.size())
 		return LIBTUB_ERROR_OUT_OF_RANGE;
 
-	*import = new (std::nothrow) libtub_import(Import(imports[index]));
+	*import = new (std::nothrow) libtub_import(imports[index]);
 	if (*import == nullptr)
 		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
@@ -669,7 +669,7 @@ bool libtub_is_populated_resource_stream_index(const libtub_bundle *LIBTUB_NONNU
 
 	return GuardValue(false, [&] {
 		const auto indices = bundle->GetResourceStreamIndices(ResourceID(resourceID));
-		return std::find(indices.begin(), indices.end(), streamIndex) != indices.end();
+		return std::ranges::find(indices, streamIndex) != indices.end();
 	});
 }
 
@@ -704,6 +704,6 @@ bool libtub_is_valid_memory_type(const libtub_bundle *LIBTUB_NONNULL bundle, lib
 
 	return GuardValue(false, [&] {
 		const auto memoryTypes = bundle->GetMemoryTypes();
-		return std::find(memoryTypes.begin(), memoryTypes.end(), static_cast<MemoryType>(memoryType)) != memoryTypes.end();
+		return std::ranges::find(memoryTypes, static_cast<MemoryType>(memoryType)) != memoryTypes.end();
 	});
 }

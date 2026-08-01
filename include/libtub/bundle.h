@@ -58,7 +58,7 @@ extern "C"
 	} libtub_error;
 
 	enum {
-#define LIBTUB_ENUM_MAGIC(_, name, value) LIBTUB_MAGIC_##name = value,
+#define LIBTUB_ENUM_MAGIC(_, name, value) LIBTUB_MAGIC_##name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_MAGIC
 	};
@@ -66,7 +66,7 @@ extern "C"
 
 	enum
 	{
-#define LIBTUB_ENUM_PLATFORM(_, name, value) LIBTUB_PLATFORM_##name = value,
+#define LIBTUB_ENUM_PLATFORM(_, name, value) LIBTUB_PLATFORM_##name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_PLATFORM
 	};
@@ -74,7 +74,7 @@ extern "C"
 
 	enum
 	{
-#define LIBTUB_ENUM_FLAGS(_, name, value) LIBTUB_FLAGS_##name = value,
+#define LIBTUB_ENUM_FLAGS(_, name, value) LIBTUB_FLAGS_##name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_FLAGS
 	};
@@ -103,7 +103,7 @@ extern "C"
 
 	enum
 	{
-#define LIBTUB_ENUM_ID_TYPE(_, name, value) LIBTUB_RESOURCE_ID_TYPE_##name = value,
+#define LIBTUB_ENUM_ID_TYPE(_, name, value) LIBTUB_RESOURCE_ID_TYPE_##name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_ID_TYPE
 	};
@@ -138,13 +138,13 @@ extern "C"
 	/* Resource type */
 	enum
 	{
-#define LIBTUB_ENUM_RESOURCE_TYPE_BURNOUT(_, name, value) LIBTUB_RESOURCE_TYPE_BURNOUT_##name = value,
+#define LIBTUB_ENUM_RESOURCE_TYPE_BURNOUT(_, name, value) LIBTUB_RESOURCE_TYPE_BURNOUT_##name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_RESOURCE_TYPE_BURNOUT
 	};
 	enum
 	{
-#define LIBTUB_ENUM_RESOURCE_TYPE_NFS(_, name, value) LIBTUB_RESOURCE_TYPE_NFS_##name = value,
+#define LIBTUB_ENUM_RESOURCE_TYPE_NFS(_, name, value) LIBTUB_RESOURCE_TYPE_NFS_##name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_RESOURCE_TYPE_NFS
 	};
@@ -158,7 +158,7 @@ extern "C"
 
 	enum
 	{
-#define LIBTUB_ENUM_MEMORY_TYPE(_, name, value) LIBTUB_MEMORY_TYPE_##name = value,
+#define LIBTUB_ENUM_MEMORY_TYPE(_, name, value) LIBTUB_MEMORY_TYPE_##name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_MEMORY_TYPE
 	};
@@ -179,7 +179,7 @@ extern "C"
 
 	enum
 	{
-#define LIBTUB_ENUM_IMPORT_TYPE(_, name, value) LIBTUB_IMPORT_TYPE_##name = value,
+#define LIBTUB_ENUM_IMPORT_TYPE(_, name, value) LIBTUB_IMPORT_TYPE_##name = (value),
 #include <libtub/internal/enum.inc>
 #undef LIBTUB_ENUM_IMPORT_TYPE
 	};

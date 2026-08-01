@@ -78,7 +78,7 @@ namespace
 
 ResourceID::ResourceID(std::string name) noexcept
 {
-	std::transform(name.begin(), name.end(), name.begin(), [](auto c) { return std::tolower(c, std::locale::classic()); });
+	std::ranges::transform(name, name.begin(), [](auto c) { return std::tolower(c, std::locale::classic()); });
 	m_id = crc32_z(0, reinterpret_cast<const Bytef *>(name.c_str()), name.length());
 }
 

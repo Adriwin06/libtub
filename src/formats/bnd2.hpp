@@ -10,35 +10,35 @@ namespace libtub
 		public:
 			using Base::Base;
 
-			virtual ErrorCode Load(binaryio::BinaryReader &reader) override;
-			virtual ErrorCode Save(binaryio::BinaryWriter &writer) override;
+			ErrorCode Load(binaryio::BinaryReader &reader) override;
+			ErrorCode Save(binaryio::BinaryWriter &writer) override;
 
-			[[nodiscard]] virtual constexpr Magic GetMagic() const override { return Magic::Bnd2; }
+			[[nodiscard]] constexpr Magic GetMagic() const override { return Magic::Bnd2; }
 
-			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceKey resourceKey) const override;
-			[[nodiscard]] virtual std::optional<Buffer> GetResourceBinary(ResourceKey resourceKey, MemoryType memoryType) const override;
+			[[nodiscard]] std::optional<Resource> GetResource(ResourceKey resourceKey) const override;
+			[[nodiscard]] std::optional<Buffer> GetResourceBinary(ResourceKey resourceKey, MemoryType memoryType) const override;
 
-			[[nodiscard]] virtual ResourceID GetDefaultResourceID() const override;
-			[[nodiscard]] virtual int32_t GetDefaultResourceStreamIndex() const override;
-			[[nodiscard]] virtual std::string GetStreamName(uint8_t index) const override;
-			virtual bool SetDefaultResource(ResourceKey resourceKey) override;
-			virtual bool SetStreamName(uint8_t index, const std::string &name) override;
+			[[nodiscard]] ResourceID GetDefaultResourceID() const override;
+			[[nodiscard]] int32_t GetDefaultResourceStreamIndex() const override;
+			[[nodiscard]] std::string GetStreamName(uint8_t index) const override;
+			bool SetDefaultResource(ResourceKey resourceKey) override;
+			bool SetStreamName(uint8_t index, const std::string &name) override;
 
-			[[nodiscard]] virtual std::vector<MemoryType> GetMemoryTypes() const override;
+			[[nodiscard]] std::vector<MemoryType> GetMemoryTypes() const override;
 
 		protected:
-			virtual constexpr bool AppendsImportsToResource() const override { return true; }
-			virtual bool IsValidPlatform() const override;
+			[[nodiscard]] constexpr bool AppendsImportsToResource() const override { return true; }
+			[[nodiscard]] bool IsValidPlatform() const override;
 
-			virtual std::vector<ResourceKey> SortedDebugDataKeys() const override;
-			virtual std::vector<std::pair<std::string, std::string>> GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugDataEntry &debugData) const override;
+			[[nodiscard]] std::vector<ResourceKey> SortedDebugDataKeys() const override;
+			[[nodiscard]] std::vector<std::pair<std::string, std::string>> GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugDataEntry &debugData) const override;
 
 		private:
 			ResourceID m_defaultResourceID{};
 			int32_t m_defaultResourceStreamIndex = -1;
 			std::array<std::string, kStreamLimit> m_streamNames{};
 
-			std::optional<uint8_t> MapFileBlockToLibBlock(uint8_t block) const;
+			[[nodiscard]] std::optional<uint8_t> MapFileBlockToLibBlock(uint8_t block) const;
 		};
 	}
 }
