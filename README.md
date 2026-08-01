@@ -127,9 +127,9 @@ int main()
 
 ## Public API highlights
 
-- `bool Load(const std::string &path)`
+- `bool Load(const std::filesystem::path &path)`
 - `bool Load(std::span<const uint8_t> data)`
-- `bool Save(const std::string &path)`
+- `bool Save(const std::filesystem::path &path)`
 - `std::vector<uint8_t> SaveToMemory()`
 - `ErrorCode GetLastErrorCode() const`
 - `const std::string &GetLastErrorMessage() const`

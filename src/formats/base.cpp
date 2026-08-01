@@ -108,14 +108,14 @@ bool Base::AddResource(ResourceKey resourceKey, const Resource &resource)
 	return true;
 }
 
-bool Base::AddResourceDebugData(ResourceKey resourceKey, const std::string &name, const std::string &type)
+bool Base::AddResourceDebugData(ResourceKey resourceKey, std::string name, std::string typeName)
 {
 	if (m_debugDataEntries.contains(resourceKey))
 		return false;
 
 	auto &debugData = m_debugDataEntries[resourceKey];
-	debugData.name = name;
-	debugData.typeName = type;
+	debugData.name = std::move(name);
+	debugData.typeName = std::move(typeName);
 
 	return true;
 }

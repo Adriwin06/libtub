@@ -4,7 +4,6 @@
 #include <binaryio/binaryreader.hpp>
 #include <binaryio/binarywriter.hpp>
 #include <algorithm>
-#include <array>
 #include <fstream>
 #include <limits>
 #include <locale>
@@ -77,21 +76,10 @@ namespace
 	}
 }
 
-ResourceID::ResourceID(const std::string &name) noexcept
+ResourceID::ResourceID(std::string name) noexcept
 {
-	// Hash the lower-cased name in fixed-size chunks rather than copying it, so this can't throw.
-	std::array<Bytef, 256> chunk;
-	uLong crc = 0;
-	for (size_t offset = 0; offset < name.size();)
-	{
-		const auto count = std::min(chunk.size(), name.size() - offset);
-		for (size_t i = 0; i < count; ++i)
-			chunk[i] = static_cast<Bytef>(std::tolower(name[offset + i], std::locale::classic()));
-
-		crc = crc32_z(crc, chunk.data(), count);
-		offset += count;
-	}
-	m_id = crc;
+	std::transform(name.begin(), name.end(), name.begin(), [](auto c) { return std::tolower(c, std::locale::classic()); });
+	m_id = crc32_z(0, reinterpret_cast<const Bytef *>(name.c_str()), name.length());
 }
 
 
@@ -149,11 +137,6 @@ bool Bundle::Fail(ErrorCode code, std::string message) const
 {
 	SetLastError(code, std::move(message));
 	return false;
-}
-
-bool Bundle::Load(const std::string &name)
-{
-	return Load(std::filesystem::path(name));
 }
 
 bool Bundle::Load(const std::filesystem::path &path)
@@ -215,11 +198,6 @@ bool Bundle::Load(std::span<const uint8_t> data)
 	m_impl = std::move(impl);
 	ClearLastError();
 	return true;
-}
-
-bool Bundle::Save(const std::string &name)
-{
-	return Save(std::filesystem::path(name));
 }
 
 bool Bundle::Save(const std::filesystem::path &path)

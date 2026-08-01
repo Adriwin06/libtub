@@ -177,7 +177,7 @@ namespace libtub
 		constexpr ResourceID() noexcept : m_id(0) {}
 		constexpr ResourceID(uint32_t id, uint16_t type, uint8_t index, IDType idType) noexcept
 			: m_id(id | (static_cast<uint64_t>(type) << 32) | (static_cast<uint64_t>(index) << 48) | (static_cast<uint64_t>(idType) << 56)) {}
-		LIBTUB_EXPORT explicit ResourceID(const std::string &name) noexcept;
+		LIBTUB_EXPORT explicit ResourceID(std::string name) noexcept;
 		constexpr explicit ResourceID(UnderlyingType id) noexcept : m_id(id) {}
 
 		[[nodiscard]] constexpr bool operator==(const ResourceID &id) const noexcept = default;
@@ -222,8 +222,8 @@ namespace libtub
 
 		constexpr Import(ResourceID resourceID, uint32_t offset, ImportType type = ImportType::Pointer) noexcept
 			: m_resourceID(resourceID), m_offset(offset | (static_cast<uint32_t>(type) << 31)) {}
-		Import(const std::string &resourceName, uint32_t offset, ImportType type = ImportType::Pointer) noexcept
-			: Import(ResourceID(resourceName), offset, type) {}
+		Import(std::string resourceName, uint32_t offset, ImportType type = ImportType::Pointer) noexcept
+			: Import(ResourceID(std::move(resourceName)), offset, type) {}
 
 		[[nodiscard]] constexpr ResourceID GetResourceID() const noexcept { return m_resourceID; }
 		[[nodiscard]] constexpr uint32_t GetOffset() const noexcept { return m_offset & 0x7FFFFFFF; }
@@ -333,10 +333,8 @@ namespace libtub
 		[[nodiscard]] LIBTUB_EXPORT const std::string &GetLastErrorMessage() const noexcept;
 		LIBTUB_EXPORT void ClearLastError() const;
 
-		LIBTUB_EXPORT bool Load(const std::string &name);
 		LIBTUB_EXPORT bool Load(const std::filesystem::path &path);
 		LIBTUB_EXPORT bool Load(std::span<const uint8_t> data);
-		LIBTUB_EXPORT bool Save(const std::string &name);
 		LIBTUB_EXPORT bool Save(const std::filesystem::path &path);
 		[[nodiscard]] LIBTUB_EXPORT std::vector<uint8_t> SaveToMemory();
 
