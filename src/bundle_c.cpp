@@ -75,7 +75,7 @@ namespace
 		return (copyLength < value.size()) ? LIBTUB_ERROR_INSUFFICIENT_BUFFER : LIBTUB_ERROR_SUCCESS;
 	}
 
-	// Exceptions must not cross the C boundary. binaryio throws heap-allocated exceptions, hence the pointer handler.
+	// Exceptions must not cross the C boundary.
 	template <typename Function>
 	libtub_error GuardError(Function &&function) noexcept
 	{
@@ -86,11 +86,6 @@ namespace
 		catch (const std::bad_alloc &)
 		{
 			return LIBTUB_ERROR_MEMORY_ALLOCATION;
-		}
-		catch (const std::exception *error)
-		{
-			delete error;
-			return LIBTUB_ERROR_GENERIC_FAILURE;
 		}
 		catch (...)
 		{
@@ -104,11 +99,6 @@ namespace
 		try
 		{
 			return function();
-		}
-		catch (const std::exception *error)
-		{
-			delete error;
-			return fallback;
 		}
 		catch (...)
 		{

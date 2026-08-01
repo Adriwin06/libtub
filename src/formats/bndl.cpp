@@ -23,7 +23,7 @@ ErrorCode Bndl::Load(binaryio::BinaryReader &reader)
 		return ErrorCode::UnsupportedVersion;
 
 	m_platform = static_cast<Platform>(0);
-	auto platformReader = reader.Copy();
+	auto platformReader = reader;
 	for (const auto offset : { 0x4C, 0x58, 0x64 })
 	{
 		platformReader.Seek(offset);
@@ -121,7 +121,7 @@ ErrorCode Bndl::Load(binaryio::BinaryReader &reader)
 			}
 		}
 
-		auto dataReader = reader.Copy();
+		auto dataReader = reader;
 		auto dataBlockStartOffset = 0;
 		for (uint8_t j = 0; j < blocks; j++)
 		{
@@ -302,7 +302,8 @@ ErrorCode Bndl::Save(binaryio::BinaryWriter &writer)
 
 		auto debugDataWriter = binaryio::BinaryWriter();
 		debugDataWriter.Write(static_cast<uint32_t>(outStr.size()));
-		debugDataWriter.Write(outStr);
+		// A std::string argument would pick binaryio's element-wise Write(T) overload instead.
+		debugDataWriter.Write(std::string_view(outStr));
 
 		const auto stream = debugDataWriter.GetStream();
 		const auto data = stream.view();

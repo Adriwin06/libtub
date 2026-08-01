@@ -120,7 +120,7 @@ ErrorCode Bnd2::Load(binaryio::BinaryReader &reader)
 			e.descriptors[*mappedBlock].onDiskAlignment = 1 << (onDiskSize >> 28);
 		}
 
-		auto dataReader = reader.Copy();
+		auto dataReader = reader;
 		for (uint8_t j = 0; j < blocks; j++)
 		{
 			const auto blockOffset = reader.Read<uint32_t>();
@@ -248,7 +248,7 @@ ErrorCode Bnd2::Save(binaryio::BinaryWriter &writer)
 		writer.VisitAndWrite<uint32_t>(rstPointerPos, writer.GetOffset32());
 		if (m_flags & Flags::HasDebugData)
 		{
-			writer.Write(GenerateDebugData());
+			WriteDebugData(writer);
 			writer.Align(16);
 		}
 	}
@@ -383,7 +383,7 @@ ErrorCode Bnd2::Save(binaryio::BinaryWriter &writer)
 	{
 		writer.VisitAndWrite<uint32_t>(rstPointerPos, writer.GetOffset32());
 		if (m_flags & Flags::HasDebugData)
-			writer.Write(GenerateDebugData());
+			WriteDebugData(writer);
 		writer.Align(lastAlignment);
 	}
 

@@ -146,6 +146,8 @@ namespace libtub
 
 			void ParseDebugData(const std::string &rstXML);
 			[[nodiscard]] std::string GenerateDebugData() const;
+			// Writes the NUL-terminated resource string table.
+			void WriteDebugData(binaryio::BinaryWriter &writer) const;
 			virtual std::vector<ResourceKey> SortedDebugDataKeys() const;
 			virtual std::vector<std::pair<std::string, std::string>> GetDebugDataAttributes(const ResourceKey &resourceKey, const ResourceDebugDataEntry &debugData) const;
 

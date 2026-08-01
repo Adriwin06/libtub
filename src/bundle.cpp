@@ -49,7 +49,7 @@ namespace
 		return { ErrorCode::DecompressionFailed, "Resource data could not be decoded; the bundle may be corrupt." };
 	}
 
-	// Returns an empty message on success. binaryio reports overflow by throwing heap-allocated exceptions.
+	// Returns an empty message on success. binaryio reports overflow by throwing std::out_of_range.
 	std::string SaveImplementation(Formats::Base &impl, binaryio::BinaryWriter &writer, ErrorCode &code)
 	{
 		code = ErrorCode::ValidationFailed;
@@ -61,22 +61,15 @@ namespace
 				return DescribeFormatFailure(result, true);
 			}
 		}
+		catch (const std::out_of_range &error)
+		{
+			code = ErrorCode::OutOfRange;
+			return std::string("Bundle writer exceeded its addressable range. ") + error.what();
+		}
 		catch (const std::exception &)
 		{
 			code = ErrorCode::GenericFailure;
 			return "Bundle writer threw while saving.";
-		}
-		catch (const std::out_of_range *error)
-		{
-			code = ErrorCode::OutOfRange;
-			std::string message = "Bundle writer exceeded its addressable range.";
-			if (error != nullptr)
-			{
-				message += " ";
-				message += error->what();
-				delete error;
-			}
-			return message;
 		}
 
 		code = ErrorCode::Success;
@@ -206,20 +199,13 @@ bool Bundle::Load(std::span<const uint8_t> data)
 		if (const auto result = impl->Load(reader); result != ErrorCode::Success)
 			return Fail(result, DescribeFormatFailure(result, false));
 	}
+	catch (const std::out_of_range &error)
+	{
+		return Fail(ErrorCode::InvalidBundle, std::string("Bundle parser seeked outside the input. ") + error.what());
+	}
 	catch (const std::exception &)
 	{
 		return Fail(ErrorCode::InvalidBundle, "Bundle parser threw while reading the input.");
-	}
-	catch (const std::out_of_range *error)
-	{
-		std::string message = "Bundle parser seeked outside the input.";
-		if (error != nullptr)
-		{
-			message += " ";
-			message += error->what();
-			delete error;
-		}
-		return Fail(ErrorCode::InvalidBundle, std::move(message));
 	}
 	catch (...)
 	{

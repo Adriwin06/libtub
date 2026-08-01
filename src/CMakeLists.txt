@@ -26,13 +26,13 @@ set(LIBTUB_PROJECT_SOURCES
     project.cpp
 )
 
-set_source_files_properties(${HEADER_DIR}/bundle.h PROPERTIES LANGUAGE C
-                                                              HEADER_FILE_ONLY ON)
+set_source_files_properties("${HEADER_DIR}/bundle.h" PROPERTIES LANGUAGE C
+                                                                HEADER_FILE_ONLY ON)
 
 FetchContent_Declare(
     binaryio
-    GIT_REPOSITORY https://github.com/Bo98/libbinaryio
-    GIT_TAG        2a95966233e818cf5c0990d6bf338da4afc81c7e
+    GIT_REPOSITORY https://github.com/Bo98/binaryio
+    GIT_TAG        2f169490c7346007e8d3c101031debab61fa804f
     SYSTEM
     EXCLUDE_FROM_ALL
     FIND_PACKAGE_ARGS
@@ -54,7 +54,9 @@ FetchContent_Declare(
     FIND_PACKAGE_ARGS 1.11
 )
 
-set(ZLIB_BUILD_SHARED ${BUILD_SHARED_LIBS})
+if(NOT DEFINED ZLIB_BUILD_SHARED)
+    set(ZLIB_BUILD_SHARED ${BUILD_SHARED_LIBS})
+endif()
 set(ZLIB_BUILD_TESTING OFF)
 FetchContent_MakeAvailable(binaryio ZLIB pugixml)
 if(NOT ZLIB_FOUND AND NOT BUILD_SHARED_LIBS)
@@ -84,7 +86,7 @@ function(configure_libtub_library target_name)
     if(TARGET pugixml::pugixml)
         target_link_libraries(${target_name} PRIVATE $<BUILD_LOCAL_INTERFACE:pugixml::pugixml>)
     else()
-        target_include_directories(${target_name} SYSTEM PRIVATE ${pugixml_SOURCE_DIR}/src)
+        target_include_directories(${target_name} SYSTEM PRIVATE "${pugixml_SOURCE_DIR}/src")
         target_compile_definitions(${target_name} PRIVATE PUGIXML_HEADER_ONLY PUGIXML_NO_XPATH)
     endif()
 
@@ -182,7 +184,8 @@ else()
 endif()
 
 if(NOT BUILD_SHARED_LIBS)
-    set(LIBTUB_STATIC_DEPENDENCY_TARGETS binaryio)
+    # binaryio is header-only, so only the compiled dependencies are installed.
+    set(LIBTUB_STATIC_DEPENDENCY_TARGETS "")
     if(TARGET zlibstatic)
         list(APPEND LIBTUB_STATIC_DEPENDENCY_TARGETS zlibstatic)
     elseif(TARGET ZLIB::ZLIB)
@@ -234,8 +237,8 @@ if(CMAKE_CXX_LINKER_SUPPORTS_PDB AND BUILD_SHARED_LIBS)
     endforeach()
 endif()
 
-install(FILES ${LIBTUB_ROOT}/LICENSE.md TYPE DOC RENAME copyright)
-install(FILES ${LIBTUB_ROOT}/NOTICE.libbndl.md TYPE DOC)
+install(FILES "${LIBTUB_ROOT}/LICENSE.md" TYPE DOC RENAME copyright)
+install(FILES "${LIBTUB_ROOT}/NOTICE.libbndl.md" TYPE DOC)
 
 if(NOT ZLIB_FOUND AND ZLIB_BUILD_SHARED)
     install(TARGETS zlib ARCHIVE EXCLUDE_FROM_ALL)

@@ -33,12 +33,11 @@ function(_libtub_import_static_dependency target_name file_pattern)
 	endforeach()
 endfunction()
 
-_libtub_import_static_dependency(libtub::binaryio "${CMAKE_STATIC_LIBRARY_PREFIX}binaryio*${CMAKE_STATIC_LIBRARY_SUFFIX}")
 _libtub_import_static_dependency(libtub::zlib "${CMAKE_STATIC_LIBRARY_PREFIX}z*${CMAKE_STATIC_LIBRARY_SUFFIX}")
 _libtub_import_static_dependency(libtub::yaml-cpp "${CMAKE_STATIC_LIBRARY_PREFIX}yaml*${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
 set(_libtub_static_dependencies "")
-foreach(dependency_target libtub::binaryio libtub::zlib libtub::yaml-cpp)
+foreach(dependency_target libtub::zlib libtub::yaml-cpp)
 	if(TARGET "${dependency_target}")
 		list(APPEND _libtub_static_dependencies "${dependency_target}")
 	endif()
