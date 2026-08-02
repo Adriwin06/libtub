@@ -77,6 +77,9 @@ bool Base::AddResource(ResourceKey resourceKey, const Resource &resource)
 	if (m_entries.contains(resourceKey) || m_entries.size() >= std::numeric_limits<uint32_t>::max() || resource.GetImports().size() > std::numeric_limits<uint16_t>::max())
 		return false;
 
+	if (resourceKey.second >= kStreamLimit)
+		return false;
+
 	const auto previousFlags = m_flags;
 	auto &e = m_entries[resourceKey];
 	e.resourceType = resource.GetResourceType();
@@ -120,6 +123,9 @@ bool Base::ReplaceResource(ResourceKey resourceKey, const Resource &resource)
 	const auto it = m_entries.find(resourceKey);
 	const auto &imports = resource.GetImports();
 	if (it == m_entries.end() || imports.size() > std::numeric_limits<uint16_t>::max())
+		return false;
+
+	if (resourceKey.second >= kStreamLimit)
 		return false;
 
 	auto &e = it->second;

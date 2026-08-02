@@ -613,6 +613,9 @@ libtub_error libtub_add_resource(libtub_bundle *LIBTUB_NONNULL bundle, libtub_re
 	if (bundle == nullptr || resource == nullptr)
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
+	if (streamIndex >= LIBTUB_STREAM_MAX_COUNT)
+		return LIBTUB_ERROR_OUT_OF_RANGE;
+
 	return GuardError([&] {
 		if (!bundle->AddResource(ResourceID(resourceID), *resource, streamIndex))
 			return MapErrorCode(bundle->GetLastErrorCode());
@@ -625,6 +628,9 @@ libtub_error libtub_replace_resource(libtub_bundle *LIBTUB_NONNULL bundle, libtu
 {
 	if (bundle == nullptr || resource == nullptr)
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
+
+	if (streamIndex >= LIBTUB_STREAM_MAX_COUNT)
+		return LIBTUB_ERROR_OUT_OF_RANGE;
 
 	return GuardError([&] {
 		if (!bundle->ReplaceResource(ResourceID(resourceID), *resource, streamIndex))

@@ -592,6 +592,37 @@ namespace
 		return ok;
 	}
 
+	bool TestStreamIndexRange()
+	{
+		using namespace libtub;
+
+		Bundle bundle(Magic::Bnd2, 5, Platform::PC, Flags());
+		Resource resource(ResourceType::NeedForSpeed::BinaryFile);
+		resource.ReplaceBinary(MemoryType::MainMemory, MakeBuffer({ 0x01 }, 1));
+
+		bool ok = true;
+		ok &= Expect(!bundle.AddResource(ResourceID("out_of_range_stream"), resource, 4), "stream range: resource added to stream 4");
+		ok &= Expect(bundle.GetResourceCount() == 0, "stream range: rejected resource left an entry");
+		ok &= Expect(!static_cast<bool>(bundle.GetFlags() & Flags::MultistreamBundle), "stream range: rejected resource set the multistream flag");
+
+		libtub_bundle *cBundle = nullptr;
+		libtub_resource *cResource = nullptr;
+		if (!Expect(libtub_create(&cBundle, LIBTUB_MAGIC_BND2, 5, LIBTUB_PLATFORM_PC, 0) == LIBTUB_ERROR_SUCCESS && libtub_resource_create(&cResource, LIBTUB_RESOURCE_TYPE_NFS_BINARY_FILE) == LIBTUB_ERROR_SUCCESS, "stream range: C API setup failed"))
+		{
+			libtub_resource_free(cResource);
+			libtub_free(cBundle);
+			return false;
+		}
+
+		const auto cResourceID = libtub_resource_id_from_name("c_out_of_range_stream");
+		ok &= Expect(libtub_add_resource(cBundle, cResourceID, cResource, LIBTUB_STREAM_MAX_COUNT) == LIBTUB_ERROR_OUT_OF_RANGE, "stream range: C API add accepted stream 4");
+		ok &= Expect(libtub_replace_resource(cBundle, cResourceID, cResource, LIBTUB_STREAM_MAX_COUNT) == LIBTUB_ERROR_OUT_OF_RANGE, "stream range: C API replace accepted stream 4");
+
+		libtub_resource_free(cResource);
+		libtub_free(cBundle);
+		return ok;
+	}
+
 	bool TestFailedLoadKeepsBundle()
 	{
 		using namespace libtub;
@@ -713,6 +744,7 @@ int main()
 	ok &= TestCompressedBnd2RoundTrip(3);
 	ok &= TestCompressedBnd2RoundTrip(5);
 	ok &= TestFailedLoadKeepsBundle();
+	ok &= TestStreamIndexRange();
 	ok &= TestCorruptBlockIsReported();
 	ok &= TestFormatFailureCodes();
 	ok &= TestCApiErrorCodes();
