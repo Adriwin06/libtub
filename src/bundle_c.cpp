@@ -1,6 +1,3 @@
-// The secure alternatives are non-standard - but the non-secure standard ones can still be used securely.
-#define _CRT_SECURE_NO_WARNINGS
-
 #include <libtub/bundle.h>
 #include <algorithm>
 #include <cstring>
