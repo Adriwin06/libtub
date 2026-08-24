@@ -41,11 +41,11 @@ namespace
 		return Expect(std::memcmp(buffer.GetData(), expected.data(), expected.size()) == 0, message + ": content mismatch");
 	}
 
-	libtub::Bundle MakeReferenceBundle()
+	libtub::Bundle MakeReferenceBundle(libtub::Platform platform = libtub::Platform::PC)
 	{
 		using namespace libtub;
 
-		auto bundle = Bundle(Magic::Bnd2, 5, Platform::PC, Flags::HasDebugData);
+		auto bundle = Bundle(Magic::Bnd2, 5, platform, Flags::HasDebugData);
 		bundle.SetStreamName(0, "base");
 		bundle.SetStreamName(1, "alt");
 
@@ -103,8 +103,10 @@ namespace
 		ok &= Expect(imports.size() == 2, label + ": import count mismatch");
 		if (imports.size() == 2)
 		{
+			ok &= Expect(imports[0].GetResourceID() == ResourceID("dependency_a"), label + ": pointer import ID mismatch");
 			ok &= Expect(imports[0].GetOffset() == 0x00000004, label + ": pointer import offset mismatch");
 			ok &= Expect(imports[0].GetImportType() == Import::ImportType::Pointer, label + ": pointer import kind mismatch");
+			ok &= Expect(imports[1].GetResourceID() == ResourceID("dependency_b"), label + ": resource handle import ID mismatch");
 			ok &= Expect(imports[1].GetOffset() == 0x00000008, label + ": resource handle import offset mismatch");
 			ok &= Expect(imports[1].GetImportType() == Import::ImportType::ResourceHandle, label + ": resource handle import kind mismatch");
 		}
@@ -112,9 +114,9 @@ namespace
 		return ok;
 	}
 
-	bool TestBnd2ImportRoundTrip()
+	bool TestBnd2ImportRoundTrip(libtub::Platform platform)
 	{
-		auto bundle = MakeReferenceBundle();
+		auto bundle = MakeReferenceBundle(platform);
 		const auto bytes = bundle.SaveToMemory();
 		if (!Expect(!bytes.empty(), "memory round-trip: failed to serialize bundle"))
 			return false;
@@ -123,7 +125,16 @@ namespace
 		if (!Expect(reloaded.Load(std::span<const uint8_t>(bytes)), "memory round-trip: failed to load serialized bundle"))
 			return false;
 
-		return VerifyBundleState(reloaded, "memory round-trip");
+		return VerifyBundleState(reloaded, "memory round-trip platform " + std::to_string(static_cast<uint16_t>(platform)));
+	}
+
+	bool TestBnd2ImportRoundTrips()
+	{
+		bool ok = true;
+		ok &= TestBnd2ImportRoundTrip(libtub::Platform::PC);
+		ok &= TestBnd2ImportRoundTrip(libtub::Platform::Xbox360);
+		ok &= TestBnd2ImportRoundTrip(libtub::Platform::PS3);
+		return ok;
 	}
 
 	bool TestProjectRoundTrip()
@@ -312,7 +323,7 @@ namespace
 int main()
 {
 	bool ok = true;
-	ok &= TestBnd2ImportRoundTrip();
+	ok &= TestBnd2ImportRoundTrips();
 #ifndef LIBTUB_SKIP_PROJECT_TESTS
 	ok &= TestProjectRoundTrip();
 #endif
