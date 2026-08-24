@@ -143,6 +143,11 @@ bool Base::ReplaceResource(ResourceKey resourceKey, const Resource &resource)
 		if (AppendsImportsToResource() && memoryType == MemoryType::MainMemory && !imports.empty())
 		{
 			binaryio::BinaryWriter writer;
+			// BND2 stores its import trailer inside the resource payload. The
+			// trailer follows the bundle platform just like every surrounding
+			// table; leaving this writer at host endianness corrupts IDs and
+			// offsets whenever a big-endian bundle is built or re-saved.
+			writer.SetEndian(GetPlatformEndian());
 			for (const auto &import : imports)
 			{
 				WriteImport(writer, import);
