@@ -38,14 +38,16 @@ jobs:
           cmake -S. -Bbuild \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DCMAKE_INSTALL_PREFIX=install \
-            -DLIBBNDL_BUILD_TOOLS=ON \
-            -DLIBBNDL_BUILD_UI=ON \
-            -DLIBBNDL_INSTALL_UI=ON \
-            -DLIBBNDL_BUILD_VALIDATIONTEST=ON
-          cmake --build build
-          cmake --install build
+            -DLIBTUB_BUILD_TOOLS=ON \
+            -DLIBTUB_BUILD_VALIDATIONTEST=ON
+          cmake --build build --config ${{ matrix.build_type }}
+          cmake --install build --config ${{ matrix.build_type }}
+
+      - name: Test
+        shell: bash
+        run: ctest --test-dir build -C ${{ matrix.build_type }} --output-on-failure
 
       - uses: actions/upload-artifact@v7
         with:
-          name: libbndl-${{ matrix.build_type }}-${{ matrix.os }}
+          name: libtub-${{ matrix.build_type }}-${{ matrix.os }}
           path: install/*

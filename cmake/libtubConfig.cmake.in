@@ -33,8 +33,8 @@ function(_libtub_import_static_dependency target_name file_pattern)
 	endforeach()
 endfunction()
 
-_libtub_import_static_dependency(libtub::zlib "z*.lib")
-_libtub_import_static_dependency(libtub::yaml-cpp "yaml*.lib")
+_libtub_import_static_dependency(libtub::zlib "${CMAKE_STATIC_LIBRARY_PREFIX}z*${CMAKE_STATIC_LIBRARY_SUFFIX}")
+_libtub_import_static_dependency(libtub::yaml-cpp "${CMAKE_STATIC_LIBRARY_PREFIX}yaml*${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
 set(_libtub_static_dependencies "")
 foreach(dependency_target libtub::zlib libtub::yaml-cpp)
