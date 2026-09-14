@@ -62,7 +62,7 @@ namespace
 		{
 			const auto cleanedName = cleanResourceNameForIO(debugData->GetName());
 
-			if (arch.GetResourceDebugData(ResourceID(cleanResourceNameForHash(debugData->GetName()))) && std::ranges::all_of(cleanedName, [](char c) { return std::isalnum(c) || c == '.' || c == '-' || c == '_' || c == '~' || c == '(' || c == ')' || c == ',' || c == '+' || c == ' '; }))
+			if (arch.GetResourceDebugData(ResourceID(cleanResourceNameForHash(debugData->GetName()))) && std::ranges::all_of(cleanedName, [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '-' || c == '_' || c == '~' || c == '(' || c == ')' || c == ',' || c == '+' || c == ' '; }))
 				return cleanedName;
 		}
 
@@ -202,6 +202,9 @@ int main(int argc, char **argv)
 				case Platform::PC:
 					platformName = "PC";
 					break;
+				case Platform::PCx64:
+					platformName = "PC x64";
+					break;
 				case Platform::Xbox360:
 					platformName = "Xbox 360";
 					break;
@@ -234,7 +237,8 @@ int main(int argc, char **argv)
 					{
 						if (flags & Flags::ContainsDefaultResource)
 						{
-							const auto debugData = arch.GetResourceDebugData(arch.GetDefaultResourceID());
+							const auto defaultStreamIndex = arch.GetDefaultResourceStreamIndex();
+							const auto debugData = arch.GetResourceDebugData(arch.GetDefaultResourceID(), static_cast<uint8_t>((defaultStreamIndex > 0) ? defaultStreamIndex : 0));
 							const auto defaultName = getDebugName(arch, debugData, resourceIDToString(arch.GetDefaultResourceID()));
 							configRoot.append_attribute("defaultResource").set_value(defaultName);
 							configRoot.append_attribute("defaultStreamIndex").set_value(arch.GetDefaultResourceStreamIndex());
@@ -262,7 +266,7 @@ int main(int argc, char **argv)
 
 					for (const auto &streamIndex : arch.GetResourceStreamIndices(resourceID))
 					{
-						const auto debugData = arch.GetResourceDebugData(resourceID);
+						const auto debugData = arch.GetResourceDebugData(resourceID, streamIndex);
 						const auto resourceType = *arch.GetResourceType(resourceID, streamIndex);
 						const auto data = *arch.GetResource(resourceID, streamIndex);
 
@@ -301,17 +305,22 @@ int main(int argc, char **argv)
 							case MemoryType::MainMemory:
 								typeExt = ".mainmem";
 								break;
+							// Each block needs its own extension. Wii U and PS Vita graphics blocks used to share ".dummy" and overwrite each other.
 							case MemoryType::GraphicsSystem:
-								if (platform == Platform::PS3)
+								if (platform == Platform::PS3 || platform == Platform::PSVita)
 									typeExt = ".gfxsysmem";
 								else if (platform == Platform::Xbox360)
 									typeExt = ".physical";
+								else if (platform == Platform::WiiU)
+									typeExt = ".mem1";
 								else
 									typeExt = ".dummy";
 								break;
 							case MemoryType::GraphicsLocal:
-								if (platform == Platform::PS3)
+								if (platform == Platform::PS3 || platform == Platform::PSVita)
 									typeExt = ".gfxlocalmem";
+								else if (platform == Platform::WiiU)
+									typeExt = ".gfxmem2";
 								else
 									typeExt = ".dummy";
 								break;
