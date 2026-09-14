@@ -11,7 +11,7 @@ namespace libtub
 			using Base::Base;
 
 			virtual bool Load(binaryio::BinaryReader &reader) override;
-			virtual bool Save(binaryio::BinaryWriter &reader) override;
+			virtual bool Save(binaryio::BinaryWriter &writer) override;
 
 			[[nodiscard]] virtual constexpr Magic GetMagic() const override { return Magic::Bnd2; }
 

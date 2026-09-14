@@ -1,7 +1,9 @@
 #include <libtub/builder.hpp>
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstring>
+#include <utility>
 
 using namespace libtub;
 
@@ -61,9 +63,30 @@ BundleResourceBuilder::BundleResourceBuilder(Bundle &bundle, ResourceID resource
 {
 }
 
-BundleResourceBuilder::BundleResourceBuilder(BundleResourceBuilder &&other) noexcept = default;
+BundleResourceBuilder::BundleResourceBuilder(BundleResourceBuilder &&other) noexcept
+	: m_bundle(std::exchange(other.m_bundle, nullptr)),
+	  m_resourceID(other.m_resourceID),
+	  m_streamIndex(other.m_streamIndex),
+	  m_resource(std::move(other.m_resource)),
+	  m_debugData(std::move(other.m_debugData)),
+	  m_lastErrorMessage(std::move(other.m_lastErrorMessage))
+{
+}
 
-BundleResourceBuilder &BundleResourceBuilder::operator=(BundleResourceBuilder &&other) noexcept = default;
+BundleResourceBuilder &BundleResourceBuilder::operator=(BundleResourceBuilder &&other) noexcept
+{
+	if (this != &other)
+	{
+		// Detach the source so a stale builder can't commit its moved-from (empty) resource.
+		m_bundle = std::exchange(other.m_bundle, nullptr);
+		m_resourceID = other.m_resourceID;
+		m_streamIndex = other.m_streamIndex;
+		m_resource = std::move(other.m_resource);
+		m_debugData = std::move(other.m_debugData);
+		m_lastErrorMessage = std::move(other.m_lastErrorMessage);
+	}
+	return *this;
+}
 
 BundleResourceBuilder &BundleResourceBuilder::Binary(MemoryType memoryType, std::span<const uint8_t> data, uint32_t alignment)
 {
@@ -155,6 +178,12 @@ bool BundleResourceBuilder::Validate()
 	if (m_streamIndex >= 4)
 		return Fail("Stream index must be in the range 0..3.");
 
+	// BNDL has no per-resource stream index, and BND2 v2 can't store the multistream flag that a
+	// non-zero stream implies, so either would only fail later when the bundle is saved.
+	const bool isBnd2 = m_bundle->GetMagic() == Magic::Bnd2;
+	if (m_streamIndex != 0 && (!isBnd2 || m_bundle->GetVersion() < 3))
+		return Fail("Stream indices other than 0 require a BND2 v3 or later bundle.");
+
 	const auto memoryTypes = m_bundle->GetMemoryTypes();
 	for (const auto memoryType : kMemoryTypeSlots)
 	{
@@ -164,6 +193,13 @@ bool BundleResourceBuilder::Validate()
 
 		if (buffer.GetAlignment() == 0)
 			return Fail("Memory block alignment must be greater than zero.");
+
+		if (!std::has_single_bit(buffer.GetAlignment()))
+			return Fail("Memory block alignment must be a power of two.");
+
+		// BND2 stores alignment as a 4-bit exponent.
+		if (isBnd2 && buffer.GetAlignment() > (1U << 15))
+			return Fail("Memory block alignment is too large for a BND2 bundle.");
 
 		if (std::find(memoryTypes.begin(), memoryTypes.end(), memoryType) == memoryTypes.end())
 			return Fail("Memory block is not valid for the selected bundle platform.");

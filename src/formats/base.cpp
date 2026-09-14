@@ -77,23 +77,30 @@ bool Base::AddResource(ResourceKey resourceKey, const Resource &resource)
 	if (m_entries.contains(resourceKey) || m_entries.size() >= std::numeric_limits<uint32_t>::max() || resource.GetImports().size() > std::numeric_limits<uint16_t>::max())
 		return false;
 
+	const auto previousFlags = m_flags;
 	auto &e = m_entries[resourceKey];
 	e.resourceType = resource.GetResourceType();
 	if (resourceKey.second != 0)
 		m_flags |= Flags::MultistreamBundle;
 
-	if (!(m_flags & Flags::Compressed))
+	// New entries need an on-disk alignment. It's not clear how this is determined (see ReplaceResource)
+	// so we'll just assume 1. This also covers empty blocks in compressed bundles, which ReplaceResource
+	// leaves untouched and which the BND2 writer aligns to (an alignment of 0 would divide by zero).
+	for (const auto &memoryType : GetMemoryTypes())
 	{
-		// If we're not compressing, we need to specify the on-disk alignment.
-		// It's not clear how this is determined (see below) so we'll just assume 1.
-		for (const auto &memoryType : GetMemoryTypes())
-		{
-			auto &descriptor = e.descriptors[LIBTUB_TO_UNDERLYING(memoryType)];
-			descriptor.onDiskAlignment = 1;
-		}
+		auto &descriptor = e.descriptors[LIBTUB_TO_UNDERLYING(memoryType)];
+		descriptor.onDiskAlignment = 1;
 	}
 
-	return ReplaceResource(resourceKey, resource);
+	if (!ReplaceResource(resourceKey, resource))
+	{
+		// Don't leave a half-initialised entry (or the multistream flag it implied) behind.
+		m_entries.erase(resourceKey);
+		m_flags = previousFlags;
+		return false;
+	}
+
+	return true;
 }
 
 bool Base::AddResourceDebugData(ResourceKey resourceKey, const std::string &name, const std::string &type)
@@ -207,6 +214,9 @@ bool Base::ReplaceResource(ResourceKey resourceKey, const Resource &resource)
 		outDataInfo.data = std::move(outBuffer);
 		outDataInfo.uncompressedAlignment = inDataInfo.GetAlignment();
 	}
+
+	if (!AppendsImportsToResource())
+		StoreSeparateImports(resourceKey, imports);
 
 	return true;
 }

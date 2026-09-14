@@ -93,7 +93,7 @@ bool Bnd2::Load(binaryio::BinaryReader &reader)
 		if (resourceID == 0)
 			return false;
 
-		ResourceEntry e;
+		ResourceEntry e{};
 
 		if (m_version < 5)
 			e.importHash = reader.Read<uint64_t>();
@@ -538,7 +538,7 @@ std::vector<std::pair<std::string, std::string>> Bnd2::GetDebugDataAttributes(co
 
 	if (m_version >= 3)
 	{
-		if (m_entries.size() == 1 && m_defaultResourceStreamIndex == resourceKey.second && !(m_flags & Flags::Compressed)
+		if ((m_entries.size() == 1 && m_defaultResourceStreamIndex == resourceKey.second && !(m_flags & Flags::Compressed))
 			|| (m_version == 3 && debugData.name.ends_with(".xml")))
 		{
 			auto it = std::ranges::find(attributes, "id", &std::pair<std::string, std::string>::first);
