@@ -203,7 +203,7 @@
     },
     {
       "name": "x86-release-unix",
-      "displayName": "x86 Debug",
+      "displayName": "x86 Release",
       "inherits": [
         "x86-release",
         "unix-base"

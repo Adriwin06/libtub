@@ -27,21 +27,22 @@ endif()
 add_test(NAME libtub.tests COMMAND libtub_tests)
 
 set(LIBTUB_TEST_GAME_PATHS "" CACHE STRING "Pipe-separated game roots for the recursive libtub game scan test.")
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libbndl-extractor/third_party/libbndl/CMakeLists.txt")
+# The extractor is only pulled in when the game scan is requested: its CMake project forces
+# BUILD_SHARED_LIBS=OFF into the cache and builds a second copy of libbndl, which breaks the default
+# configure whenever the nested submodule happens to be checked out.
+if(LIBTUB_TEST_GAME_PATHS)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libbndl-extractor/third_party/libbndl/CMakeLists.txt")
+        message(FATAL_ERROR "LIBTUB_TEST_GAME_PATHS was provided but tests/third_party/libbndl-extractor (and its nested libbndl submodule) is not checked out.")
+    endif()
+
     add_subdirectory(third_party/libbndl-extractor EXCLUDE_FROM_ALL)
 
-    if(LIBTUB_TEST_GAME_PATHS)
-        set(LIBTUB_GAME_SCAN_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/game-scan")
-        add_test(
-            NAME libtub.game_scan
-            COMMAND volatility_libtub_extract
-                --games "${LIBTUB_TEST_GAME_PATHS}"
-                --output "${LIBTUB_GAME_SCAN_OUTPUT_DIR}"
-                --failures "${LIBTUB_GAME_SCAN_OUTPUT_DIR}/failures.tsv"
-        )
-    endif()
-elseif(LIBTUB_TEST_GAME_PATHS)
-    message(FATAL_ERROR "LIBTUB_TEST_GAME_PATHS was provided but tests/third_party/libbndl-extractor is not checked out.")
-elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libbndl-extractor/CMakeLists.txt")
-    message(STATUS "Skipping libbndl-extractor test helper because its nested libbndl submodule is missing.")
+    set(LIBTUB_GAME_SCAN_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/game-scan")
+    add_test(
+        NAME libtub.game_scan
+        COMMAND volatility_libtub_extract
+            --games "${LIBTUB_TEST_GAME_PATHS}"
+            --output "${LIBTUB_GAME_SCAN_OUTPUT_DIR}"
+            --failures "${LIBTUB_GAME_SCAN_OUTPUT_DIR}/failures.tsv"
+    )
 endif()
