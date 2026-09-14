@@ -9,7 +9,7 @@ namespace libtub::Formats
 		using Base::Base;
 
 		bool Load(binaryio::BinaryReader &reader) override;
-		bool Save(binaryio::BinaryWriter &reader) override;
+		bool Save(binaryio::BinaryWriter &writer) override;
 
 		[[nodiscard]] constexpr Magic GetMagic() const override { return Magic::Bndl; }
 
@@ -19,6 +19,7 @@ namespace libtub::Formats
 		std::map<ResourceID, std::vector<ImportEntry>> m_imports;
 
 		[[nodiscard]] constexpr bool AppendsImportsToResource() const override { return false; }
+		void StoreSeparateImports(ResourceKey resourceKey, const std::vector<Import> &imports) override;
 
 		[[nodiscard]] std::optional<uint8_t> MapFileBlockToLibBlock(uint8_t block) const;
 	};

@@ -189,6 +189,8 @@ extern "C"
 
 	LIBTUB_EXPORT libtub_error libtub_copy_resource(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource *LIBTUB_NULLABLE *LIBTUB_NONNULL resource, libtub_resource_id resourceID, uint8_t streamIndex);
 
+	/* The resource owns the returned buffer, so don't pass it to libtub_buffer_free. The pointer stays
+	   valid until you free the resource or replace that memory type. */
 	LIBTUB_EXPORT libtub_error libtub_resource_get_binary_mut(libtub_resource *LIBTUB_NONNULL resource, libtub_buffer *LIBTUB_NULLABLE *LIBTUB_NONNULL buffer, libtub_memory_type memoryType);
 	LIBTUB_EXPORT libtub_error libtub_resource_get_binary_const(const libtub_resource *LIBTUB_NONNULL resource, const libtub_buffer *LIBTUB_NULLABLE *LIBTUB_NONNULL buffer, libtub_memory_type memoryType);
 #	define libtub_resource_get_binary(resource, buffer, memoryType) _Generic((resource), \

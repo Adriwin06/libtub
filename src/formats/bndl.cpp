@@ -4,6 +4,11 @@
 using namespace libtub;
 using namespace libtub::Formats;
 
+namespace
+{
+	constexpr uint64_t kResourceStringTableID = 0xC039284A;
+}
+
 bool Bndl::Load(binaryio::BinaryReader &reader)
 {
 	auto version = reader.Read<uint32_t>();
@@ -188,7 +193,7 @@ bool Bndl::Load(binaryio::BinaryReader &reader)
 			m_imports[resourceID].emplace_back(ReadImport(reader));
 	}
 
-	auto rstFile = GetBinary({ ResourceID(0xC039284A), static_cast<uint8_t>(0) }, MemoryType::MainMemory);
+	auto rstFile = GetBinary({ ResourceID(kResourceStringTableID), static_cast<uint8_t>(0) }, MemoryType::MainMemory);
 	if (rstFile == nullptr)
 		return true;
 
@@ -208,7 +213,7 @@ bool Bndl::Load(binaryio::BinaryReader &reader)
 
 	ParseDebugData(rstXML);
 
-	m_entries.erase({ ResourceID(0xC039284A), static_cast<uint8_t>(0) });
+	m_entries.erase({ ResourceID(kResourceStringTableID), static_cast<uint8_t>(0) });
 
 	return true;
 };
@@ -290,16 +295,8 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 
 	writer.Align(0x10);
 
-	// ID LIST
-	writer.VisitAndWrite<uint32_t>(idListPointerPos, writer.GetOffset32());
-	for (const auto &entry : m_entries)
-	{
-		writer.Write<uint64_t>(entry.first.first);
-	}
-	if (writeDebugData)
-		writer.Write<uint64_t>(0xC039284A);
-
 	// Prepare ResourceStringTable
+	const ResourceKey debugDataKey{ ResourceID(kResourceStringTableID), static_cast<uint8_t>(0) };
 	if (writeDebugData)
 	{
 		const auto outStr = GenerateDebugData();
@@ -313,14 +310,37 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 		const auto data = stream.view();
 		const auto dataSize = data.size();
 
-		auto &e = m_entries[{ ResourceID(0xC039284A), static_cast<uint8_t>(0) }];
+		auto &e = m_entries[debugDataKey];
+		e = ResourceEntry{};
 		e.resourceType = ResourceType::Burnout::TextFile;
 
 		e.descriptors[0].data = std::make_unique_for_overwrite<uint8_t[]>(dataSize);
 		std::memcpy(e.descriptors[0].data.get(), data.data(), dataSize);
 
+		// Save only writes debug data into uncompressed bundles, so the on-disk size and alignment equal the uncompressed ones.
 		e.descriptors[0].uncompressedSize = static_cast<uint32_t>(dataSize);
 		e.descriptors[0].uncompressedAlignment = 4;
+		e.descriptors[0].onDiskSize = e.descriptors[0].uncompressedSize;
+		e.descriptors[0].onDiskAlignment = e.descriptors[0].uncompressedAlignment;
+	}
+
+	// The loader pairs the ID list with the ID table by position, so the tables below share one entry order.
+	// The string table goes last wherever its ID would sort.
+	std::vector<const std::pair<const ResourceKey, ResourceEntry> *> orderedEntries;
+	orderedEntries.reserve(m_entries.size());
+	for (const auto &entry : m_entries)
+	{
+		if (!writeDebugData || entry.first != debugDataKey)
+			orderedEntries.push_back(&entry);
+	}
+	if (writeDebugData)
+		orderedEntries.push_back(&*m_entries.find(debugDataKey));
+
+	// ID LIST
+	writer.VisitAndWrite<uint32_t>(idListPointerPos, writer.GetOffset32());
+	for (const auto *entry : orderedEntries)
+	{
+		writer.Write<uint64_t>(entry->first.first);
 	}
 
 	// ID TABLE
@@ -332,16 +352,16 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 		std::array<size_t, 4> dataBlockPointerPos;
 	};
 	std::map<ResourceID, FilePointerPosHelper> filePointerPosMap;
-	for (const auto &entry : m_entries)
+	for (const auto *entry : orderedEntries)
 	{
 		writer.Write<uint32_t>(0); // Ignore
 
-		auto &posHelper = filePointerPosMap[entry.first.first];
+		auto &posHelper = filePointerPosMap[entry->first.first];
 
 		posHelper.importPointerPos = writer.GetOffset();
 		writer.Write<uint32_t>(0);
 
-		writer.Write(entry.second.resourceType);
+		writer.Write(entry->second.resourceType);
 
 		for (uint8_t i = 0; i < blocks; i++)
 		{
@@ -353,7 +373,7 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 			}
 			else
 			{
-				const auto &descriptor = entry.second.descriptors[*mappedBlock];
+				const auto &descriptor = entry->second.descriptors[*mappedBlock];
 				writer.Write<uint32_t>(descriptor.onDiskSize);
 				writer.Write<uint32_t>((descriptor.onDiskSize == 0) ? 1 : descriptor.onDiskAlignment);
 			}
@@ -378,7 +398,7 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 	if (m_flags & Flags::Compressed)
 	{
 		writer.VisitAndWrite<uint32_t>(uncompInfoBlockPointerPos, writer.GetOffset32());
-		for (const auto &entry : m_entries)
+		for (const auto *entry : orderedEntries)
 		{
 			for (uint8_t i = 0; i < blocks; i++)
 			{
@@ -390,7 +410,7 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 				}
 				else
 				{
-					const auto &descriptor = entry.second.descriptors[*mappedBlock];
+					const auto &descriptor = entry->second.descriptors[*mappedBlock];
 					writer.Write<uint32_t>(descriptor.uncompressedSize);
 					writer.Write<uint32_t>((descriptor.uncompressedSize == 0) ? 1 : descriptor.uncompressedAlignment);
 				}
@@ -400,22 +420,19 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 
 	// IMPORTS
 	writer.VisitAndWrite<uint32_t>(importBlockPointerPos, writer.GetOffset32());
-	for (const auto &entry : m_entries)
+	for (const auto *entry : orderedEntries)
 	{
-		const auto &imports = m_imports[entry.first.first];
-		if (imports.empty())
+		const auto importsIt = m_imports.find(entry->first.first);
+		if (importsIt == m_imports.end() || importsIt->second.empty())
 			continue;
 
-		writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first.first).importPointerPos, writer.GetOffset32());
+		const auto &imports = importsIt->second;
+		writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry->first.first).importPointerPos, writer.GetOffset32());
 
 		writer.Write(static_cast<uint32_t>(imports.size()));
 		writer.Write<uint32_t>(0); // padding
 		for (const auto &import : imports)
-		{
-			writer.Write<uint64_t>(import.resourceID);
-			writer.Write<uint32_t>(import.offset);
-			writer.Align(8);
-		}
+			WriteImport(writer, Import(import.resourceID, import.offset, import.type));
 	}
 
 	// DATA
@@ -427,15 +444,15 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 		if (!mappedBlock)
 			continue;
 
-		for (const auto &entry : m_entries)
+		for (const auto *entry : orderedEntries)
 		{
-			const auto &e = entry.second;
+			const auto &e = entry->second;
 
 			const auto &descriptor = e.descriptors[*mappedBlock];
 
 			if (descriptor.onDiskSize > 0)
 			{
-				writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry.first.first).dataBlockPointerPos[*mappedBlock], writer.GetOffset32() - blockStartOffset);
+				writer.VisitAndWrite<uint32_t>(filePointerPosMap.at(entry->first.first).dataBlockPointerPos[*mappedBlock], writer.GetOffset32() - blockStartOffset);
 				writer.Write(descriptor.data.get(), descriptor.onDiskSize);
 			}
 		}
@@ -448,9 +465,27 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 		blockStartOffset = writer.GetOffset32();
 	}
 
-	m_entries.erase({ ResourceID(0xC039284A), static_cast<uint8_t>(0) });
+	if (writeDebugData)
+		m_entries.erase(debugDataKey);
 
 	return true;
+}
+
+void Bndl::StoreSeparateImports(ResourceKey resourceKey, const std::vector<Import> &imports)
+{
+	m_entries.at(resourceKey).importCount = static_cast<uint16_t>(imports.size());
+
+	if (imports.empty())
+	{
+		m_imports.erase(resourceKey.first);
+		return;
+	}
+
+	auto &importEntries = m_imports[resourceKey.first];
+	importEntries.clear();
+	importEntries.reserve(imports.size());
+	for (const auto &import : imports)
+		importEntries.push_back({ import.GetResourceID(), import.GetOffset(), import.GetImportType() });
 }
 
 std::optional<uint8_t> Bndl::MapFileBlockToLibBlock(uint8_t block) const

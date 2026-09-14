@@ -76,23 +76,30 @@ bool Base::AddResource(ResourceKey resourceKey, const Resource &resource)
 	if (resourceKey.second >= kStreamLimit)
 		return false;
 
+	const auto previousFlags = m_flags;
 	auto &e = m_entries[resourceKey];
 	e.resourceType = resource.GetResourceType();
 	if (resourceKey.second != 0)
 		m_flags |= Flags::MultistreamBundle;
 
-	if (!(m_flags & Flags::Compressed))
+	// New entries need an on-disk alignment. We don't know how the original tools pick it (see ReplaceResource),
+	// so we assume 1. Empty blocks in compressed bundles keep this value because ReplaceResource skips
+	// them, and the BND2 writer divides by it.
+	for (const auto &memoryType : GetMemoryTypes())
 	{
-		// If we're not compressing, we need to specify the on-disk alignment.
-		// It's not clear how this is determined (see below) so we'll just assume 1.
-		for (const auto &memoryType : GetMemoryTypes())
-		{
-			auto &descriptor = e.descriptors[LIBTUB_TO_UNDERLYING(memoryType)];
-			descriptor.onDiskAlignment = 1;
-		}
+		auto &descriptor = e.descriptors[LIBTUB_TO_UNDERLYING(memoryType)];
+		descriptor.onDiskAlignment = 1;
 	}
 
-	return ReplaceResource(resourceKey, resource);
+	if (!ReplaceResource(resourceKey, resource))
+	{
+		// Remove the half-initialised entry and restore the flags it may have changed.
+		m_entries.erase(resourceKey);
+		m_flags = previousFlags;
+		return false;
+	}
+
+	return true;
 }
 
 bool Base::AddResourceDebugData(ResourceKey resourceKey, std::string name, std::string typeName)
@@ -208,6 +215,9 @@ bool Base::ReplaceResource(ResourceKey resourceKey, const Resource &resource)
 		outDataInfo.data = std::move(outBuffer);
 		outDataInfo.uncompressedAlignment = inDataInfo.GetAlignment();
 	}
+
+	if (!AppendsImportsToResource())
+		StoreSeparateImports(resourceKey, imports);
 
 	return true;
 }

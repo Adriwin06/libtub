@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <span>
@@ -318,6 +319,245 @@ namespace
 		ok &= TestBndlPlatformRoundTrip(libtub::Platform::PS3);
 		return ok;
 	}
+
+	bool TestBndlDebugDataRoundTrip()
+	{
+		using namespace libtub;
+
+		// One ID sorts before the ResourceStringTable ID (0xC039284A) and one after it, so the
+		// ID list and ID table must agree on where the string table entry goes.
+		const ResourceID lowID(0x00001234ULL);
+		const ResourceID highID(0xF0000000ULL);
+		const std::vector<uint8_t> lowBytes{ 0x01, 0x02 };
+		const std::vector<uint8_t> highBytes{ 0x03, 0x04, 0x05 };
+
+		Bundle bundle(Magic::Bndl, 5, Platform::PC, Flags());
+		Resource lowResource(ResourceType::Burnout::BinaryFile);
+		lowResource.ReplaceBinary(MemoryType::MainMemory, MakeBuffer(lowBytes, 4));
+		Resource highResource(ResourceType::Burnout::TextFile);
+		highResource.ReplaceBinary(MemoryType::MainMemory, MakeBuffer(highBytes, 4));
+
+		bool ok = true;
+		ok &= Expect(bundle.AddResource(lowID, lowResource), "BNDL debug data: failed to add low resource");
+		ok &= Expect(bundle.AddResource(highID, highResource), "BNDL debug data: failed to add high resource");
+		ok &= Expect(bundle.AddResourceDebugData(lowID, ResourceDebugData("low.bin", "BinaryFile")), "BNDL debug data: failed to add low debug data");
+		ok &= Expect(bundle.AddResourceDebugData(highID, ResourceDebugData("high.txt", "TextFile")), "BNDL debug data: failed to add high debug data");
+
+		const auto saved = bundle.SaveToMemory();
+		if (!Expect(ok && !saved.empty(), "BNDL debug data: failed to serialize"))
+			return false;
+
+		Bundle reloaded;
+		if (!Expect(reloaded.Load(std::span<const uint8_t>(saved)), "BNDL debug data: failed to reload"))
+			return false;
+
+		ok &= Expect(reloaded.GetResourceCount() == 2, "BNDL debug data: string table leaked into resource list");
+		ok &= Expect(reloaded.GetResourceType(lowID) == ResourceType::Burnout::BinaryFile, "BNDL debug data: low resource type mismatch");
+		ok &= Expect(reloaded.GetResourceType(highID) == ResourceType::Burnout::TextFile, "BNDL debug data: high resource type mismatch");
+		ok &= ExpectBytes(reloaded.GetBinary(lowID, MemoryType::MainMemory), lowBytes, "BNDL debug data: low resource bytes");
+		ok &= ExpectBytes(reloaded.GetBinary(highID, MemoryType::MainMemory), highBytes, "BNDL debug data: high resource bytes");
+
+		const auto lowDebugData = reloaded.GetResourceDebugData(lowID);
+		const auto highDebugData = reloaded.GetResourceDebugData(highID);
+		ok &= Expect(lowDebugData && lowDebugData->GetName() == "low.bin", "BNDL debug data: low debug name lost");
+		ok &= Expect(highDebugData && highDebugData->GetName() == "high.txt", "BNDL debug data: high debug name lost");
+		return ok;
+	}
+
+	bool TestBndlImportRoundTrip()
+	{
+		using namespace libtub;
+
+		const ResourceID dependencyID("bndl_dependency");
+		const ResourceID resourceID("bndl_importer");
+
+		Bundle bundle(Magic::Bndl, 5, Platform::PC, Flags());
+		Resource dependency(ResourceType::Burnout::BinaryFile);
+		dependency.ReplaceBinary(MemoryType::MainMemory, MakeBuffer({ 0xAA }, 1));
+		Resource resource(ResourceType::Burnout::BinaryFile);
+		resource.ReplaceBinary(MemoryType::MainMemory, MakeBuffer({ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, 4));
+		resource.AddImport(Import(dependencyID, 0x4));
+
+		bool ok = true;
+		ok &= Expect(bundle.AddResource(dependencyID, dependency), "BNDL imports: failed to add dependency");
+		ok &= Expect(bundle.AddResource(resourceID, resource), "BNDL imports: failed to add resource");
+
+		const auto added = bundle.GetResource(resourceID);
+		ok &= Expect(added && added->GetImports().size() == 1, "BNDL imports: added import not visible");
+
+		auto saved = bundle.SaveToMemory();
+		Bundle reloaded;
+		if (!Expect(!saved.empty() && reloaded.Load(std::span<const uint8_t>(saved)), "BNDL imports: failed to round-trip"))
+			return false;
+
+		const auto reloadedResource = reloaded.GetResource(resourceID);
+		ok &= Expect(reloadedResource && reloadedResource->GetImports().size() == 1, "BNDL imports: import lost on save");
+		if (reloadedResource && reloadedResource->GetImports().size() == 1)
+		{
+			ok &= Expect(reloadedResource->GetImports()[0].GetResourceID() == dependencyID, "BNDL imports: import ID mismatch");
+			ok &= Expect(reloadedResource->GetImports()[0].GetOffset() == 0x4, "BNDL imports: import offset mismatch");
+		}
+
+		// Replacing the resource must replace its imports, both in memory and on disk.
+		Resource replacement(ResourceType::Burnout::BinaryFile);
+		replacement.ReplaceBinary(MemoryType::MainMemory, MakeBuffer({ 0x01, 0x02, 0x03, 0x04 }, 4));
+		ok &= Expect(reloaded.ReplaceResource(resourceID, replacement), "BNDL imports: failed to replace resource");
+		const auto replaced = reloaded.GetResource(resourceID);
+		ok &= Expect(replaced && replaced->GetImports().empty(), "BNDL imports: replaced resource kept old imports in memory");
+
+		saved = reloaded.SaveToMemory();
+		Bundle resaved;
+		if (!Expect(!saved.empty() && resaved.Load(std::span<const uint8_t>(saved)), "BNDL imports: failed to round-trip replacement"))
+			return false;
+
+		const auto resavedResource = resaved.GetResource(resourceID);
+		ok &= Expect(resavedResource && resavedResource->GetImports().empty(), "BNDL imports: stale imports written after replacement");
+		return ok;
+	}
+
+	bool TestBnd2DecompRoundTrip()
+	{
+		using namespace libtub;
+
+		BundleBuilder builder(BundleProfiles::BurnoutParadiseDecomp());
+		const ResourceID dependencyID("decomp_dependency");
+		const ResourceID resourceID("decomp_resource");
+		const std::vector<uint8_t> dependencyBytes{ 0x01, 0x02, 0x03, 0x04 };
+		const std::vector<uint8_t> resourceBytes{ 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80 };
+		const std::vector<uint8_t> disposableBytes{ 0xFE, 0xED };
+
+		bool ok = true;
+		ok &= Expect(builder.AddResource(dependencyID, ResourceType::Burnout::BinaryFile)
+			.MainMemory(std::span<const uint8_t>(dependencyBytes), 4)
+			.DebugData("decomp_dependency.bin", "BinaryFile")
+			.Commit(), "decomp round-trip: failed to add dependency");
+		ok &= Expect(builder.AddResource(resourceID, ResourceType::Burnout::Renderable)
+			.MainMemory(std::span<const uint8_t>(resourceBytes), 16)
+			.Disposable(std::span<const uint8_t>(disposableBytes), 16)
+			.Import(dependencyID, 0x4)
+			.DebugData("decomp_resource.bin", "Renderable")
+			.Commit(), "decomp round-trip: failed to add resource");
+
+		const auto saved = builder.SaveToMemory();
+		if (!Expect(ok && saved.size() > 12, "decomp round-trip: failed to serialize"))
+			return false;
+
+		uint32_t onDiskPlatform = 0;
+		std::memcpy(&onDiskPlatform, saved.data() + 8, sizeof(onDiskPlatform));
+		ok &= Expect(onDiskPlatform == 4, "decomp round-trip: platform was not stored as 4");
+
+		Bundle reloaded;
+		if (!Expect(reloaded.Load(std::span<const uint8_t>(saved)), "decomp round-trip: failed to reload"))
+			return false;
+
+		ok &= Expect(reloaded.GetPlatform() == Platform::PCx64, "decomp round-trip: platform mismatch");
+		ok &= Expect(static_cast<bool>(reloaded.GetFlags() & Flags::Compressed), "decomp round-trip: compression flag lost");
+		ok &= ExpectBytes(reloaded.GetBinary(resourceID, MemoryType::MainMemory), resourceBytes, "decomp round-trip: main memory");
+		ok &= ExpectBytes(reloaded.GetBinary(resourceID, MemoryType::Disposable), disposableBytes, "decomp round-trip: disposable memory");
+
+		const auto resource = reloaded.GetResource(resourceID);
+		ok &= Expect(resource && resource->GetImports().size() == 1 && resource->GetImports()[0].GetResourceID() == dependencyID, "decomp round-trip: import mismatch");
+
+		const auto debugData = reloaded.GetResourceDebugData(resourceID);
+		ok &= Expect(debugData && debugData->GetName() == "decomp_resource.bin", "decomp round-trip: debug data mismatch");
+
+		ok &= Expect(reloaded.SaveToMemory() == saved, "decomp round-trip: resave was not byte-identical");
+		return ok;
+	}
+
+	bool TestCompressedBnd2RoundTrip(uint16_t version)
+	{
+		using namespace libtub;
+
+		// Only main memory is populated, so the other blocks rely on a default on-disk alignment.
+		Bundle bundle(Magic::Bnd2, version, Platform::PC, Flags::Compressed | Flags::HasDebugData);
+		const ResourceID resourceID("compressed_resource");
+		const std::vector<uint8_t> bytes{ 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77 };
+		Resource resource(ResourceType::NeedForSpeed::BinaryFile);
+		resource.ReplaceBinary(MemoryType::MainMemory, MakeBuffer(bytes, 8));
+
+		const auto label = "compressed BND2 v" + std::to_string(version);
+		if (!Expect(bundle.AddResource(resourceID, resource), label + ": failed to add resource"))
+			return false;
+
+		const auto saved = bundle.SaveToMemory();
+		Bundle reloaded;
+		if (!Expect(!saved.empty() && reloaded.Load(std::span<const uint8_t>(saved)), label + ": failed to round-trip"))
+			return false;
+
+		return ExpectBytes(reloaded.GetBinary(resourceID, MemoryType::MainMemory), bytes, label + ": main memory");
+	}
+
+	bool TestFailedLoadKeepsBundle()
+	{
+		using namespace libtub;
+
+		auto bundle = MakeReferenceBundle();
+		const auto resourceCount = bundle.GetResourceCount();
+
+		// Valid magic and version but a truncated header, so the parser itself rejects it.
+		const std::vector<uint8_t> truncated{ 'b', 'n', 'd', '2', 0x05, 0x00, 0x01, 0x00 };
+		bool ok = true;
+		ok &= Expect(!bundle.Load(std::span<const uint8_t>(truncated)), "failed load: truncated bundle was accepted");
+		ok &= Expect(bundle.GetLastErrorCode() != ErrorCode::Success, "failed load: no error code reported");
+		ok &= Expect(bundle.IsValid() && bundle.GetResourceCount() == resourceCount, "failed load: previous bundle contents were discarded");
+
+		const std::vector<uint8_t> unknownMagic{ 'n', 'o', 'p', 'e', 0x00, 0x00, 0x00, 0x00 };
+		ok &= Expect(!bundle.Load(std::span<const uint8_t>(unknownMagic)), "failed load: unknown magic was accepted");
+		ok &= Expect(bundle.GetLastErrorCode() == ErrorCode::UnsupportedFormat, "failed load: unknown magic error code mismatch");
+		ok &= Expect(bundle.IsValid() && bundle.GetResourceCount() == resourceCount, "failed load: unknown magic discarded previous contents");
+
+		Bundle empty;
+		ok &= Expect(!empty.Load(std::span<const uint8_t>(truncated)), "failed load: truncated bundle was accepted by empty bundle");
+		ok &= Expect(!empty.IsValid(), "failed load: empty bundle became valid after a failed load");
+		return ok;
+	}
+
+	bool TestBundleBuilderMoveAndValidation()
+	{
+		using namespace libtub;
+
+		const std::vector<uint8_t> bytes{ 0x01, 0x02, 0x03, 0x04 };
+		bool ok = true;
+
+		BundleBuilder builder(BundleProfiles::NeedForSpeedHotPursuitPC());
+		auto original = builder.AddResource(ResourceID("moved_resource"), ResourceType::NeedForSpeed::BinaryFile);
+		original.MainMemory(std::span<const uint8_t>(bytes), 4);
+		auto moved = std::move(original);
+		ok &= Expect(!original.Commit(), "builder move: moved-from resource builder committed");
+		ok &= Expect(builder.GetBundle().GetResourceCount() == 0, "builder move: moved-from commit added a resource");
+		ok &= Expect(moved.Commit(), "builder move: moved-to resource builder failed to commit");
+
+		auto badAlignment = builder.AddResource(ResourceID("bad_alignment"), ResourceType::NeedForSpeed::BinaryFile);
+		ok &= Expect(!badAlignment.MainMemory(std::span<const uint8_t>(bytes), 3).Commit(), "builder validation: non power-of-two alignment was accepted");
+
+		BundleBuilder bndlBuilder(BundleProfiles::BndlPC());
+		auto streamed = bndlBuilder.AddResource(ResourceID("bndl_streamed"), ResourceType::Burnout::BinaryFile, 1);
+		ok &= Expect(!streamed.MainMemory(std::span<const uint8_t>(bytes), 4).Commit(), "builder validation: BNDL accepted a non-zero stream index");
+		return ok;
+	}
+
+#ifndef LIBTUB_SKIP_PROJECT_TESTS
+	bool TestProjectRejectsOutOfRangeValues()
+	{
+		const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+		const auto directory = std::filesystem::temp_directory_path() / ("libtub-project-range-test-" + std::to_string(stamp));
+		std::filesystem::create_directories(directory);
+
+		// Version 65541 truncates to 5 if the parser does not range-check.
+		{
+			std::ofstream meta(directory / ".meta.yaml", std::ios::binary);
+			meta << "bundle:\n  magic: bnd2\n  version: 65541\n  platform: pc\nresources: []\n";
+		}
+
+		libtub::Bundle imported;
+		const bool rejected = Expect(!imported.ImportProject(directory), "project range: out-of-range version was accepted");
+
+		std::error_code error;
+		std::filesystem::remove_all(directory, error);
+		return rejected;
+	}
+#endif
 }
 
 int main()
@@ -326,10 +566,18 @@ int main()
 	ok &= TestBnd2ImportRoundTrips();
 #ifndef LIBTUB_SKIP_PROJECT_TESTS
 	ok &= TestProjectRoundTrip();
+	ok &= TestProjectRejectsOutOfRangeValues();
 #endif
 	ok &= TestBundleBuilder();
 	ok &= TestBundleBuilderValidation();
+	ok &= TestBundleBuilderMoveAndValidation();
 	ok &= TestCApiBinaryErrors();
 	ok &= TestBndlPlatformRoundTrips();
+	ok &= TestBndlDebugDataRoundTrip();
+	ok &= TestBndlImportRoundTrip();
+	ok &= TestBnd2DecompRoundTrip();
+	ok &= TestCompressedBnd2RoundTrip(3);
+	ok &= TestCompressedBnd2RoundTrip(5);
+	ok &= TestFailedLoadKeepsBundle();
 	return ok ? 0 : 1;
 }

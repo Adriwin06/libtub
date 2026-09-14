@@ -3,6 +3,8 @@
 #include <binaryio/binaryreader.hpp>
 #include <binaryio/binarywriter.hpp>
 #include <array>
+#include <bit>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -10,6 +12,10 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#if defined(_MSC_VER)
+#	include <intrin.h>
+#endif
 
 #ifndef __has_builtin
 #	define __has_builtin(x) 0
@@ -82,7 +88,7 @@ namespace libtub::Formats
 		virtual ~Base() = default;
 
 		virtual bool Load(binaryio::BinaryReader &reader) = 0;
-		virtual bool Save(binaryio::BinaryWriter &reader) = 0;
+		virtual bool Save(binaryio::BinaryWriter &writer) = 0;
 
 		[[nodiscard]] virtual constexpr Magic GetMagic() const = 0;
 		[[nodiscard]] constexpr uint16_t GetVersion() const { return m_version; }
@@ -123,6 +129,8 @@ namespace libtub::Formats
 		Flags m_flags;
 
 		[[nodiscard]] virtual constexpr bool AppendsImportsToResource() const = 0;
+		// ReplaceResource calls this for formats that keep imports outside the resource payload (BNDL).
+		virtual void StoreSeparateImports(ResourceKey, const std::vector<Import> &) {}
 		[[nodiscard]] virtual bool IsValidPlatform() const;
 
 		[[nodiscard]] std::endian GetPlatformEndian() const;

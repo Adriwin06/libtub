@@ -5,9 +5,11 @@
 #include <cstring>
 #include <format>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <optional>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -55,7 +57,18 @@ namespace
 				index = 2;
 			}
 
-			return static_cast<T>(std::stoull(scalar.substr(index), nullptr, base));
+			// std::stoull wraps negative input and ignores trailing garbage, so require plain digits that fit
+			// the target type.
+			const auto digits = scalar.substr(index);
+			if (digits.empty() || !std::isxdigit(static_cast<unsigned char>(digits.front())))
+				return {};
+
+			size_t parsedLength = 0;
+			const auto value = std::stoull(digits, &parsedLength, base);
+			if (parsedLength != digits.size() || value > std::numeric_limits<T>::max())
+				return {};
+
+			return static_cast<T>(value);
 		}
 		catch (const std::exception &)
 		{
@@ -70,12 +83,38 @@ namespace
 
 		try
 		{
-			return static_cast<int32_t>(std::stoll(node.Scalar(), nullptr, 10));
+			const auto &scalar = node.Scalar();
+			size_t parsedLength = 0;
+			const auto value = std::stoll(scalar, &parsedLength, 10);
+			if (parsedLength != scalar.size() || value < std::numeric_limits<int32_t>::min() || value > std::numeric_limits<int32_t>::max())
+				return {};
+
+			return static_cast<int32_t>(value);
 		}
 		catch (const std::exception &)
 		{
 			return {};
 		}
+	}
+
+	// An absent optional scalar takes the fallback; a present but malformed one fails.
+	template <typename T>
+	std::optional<T> ParseOptionalUnsignedScalar(const YAML::Node &node, T fallback)
+	{
+		if (!node)
+			return fallback;
+
+		return ParseUnsignedScalar<T>(node);
+	}
+
+	YAML::Node LoadYamlFile(const std::filesystem::path &path)
+	{
+		// YAML::LoadFile takes a narrow string, which can't hold non-ANSI paths on Windows.
+		std::ifstream stream(path, std::ios::binary);
+		if (!stream)
+			throw std::runtime_error("Could not open YAML file.");
+
+		return YAML::Load(stream);
 	}
 
 	std::optional<bool> ParseBoolScalar(const YAML::Node &node)
@@ -353,7 +392,8 @@ namespace
 				return {};
 			}
 
-			if (!resourceID || !offset)
+			// The top bit of an import offset encodes the import kind.
+			if (!resourceID || !offset || *offset > 0x7FFFFFFF)
 				return {};
 
 			imports.emplace_back(*resourceID, *offset, importType);
@@ -441,18 +481,18 @@ namespace
 		if (!std::filesystem::exists(path))
 			return importsByResource;
 
-		const auto root = YAML::LoadFile(path.string());
+		const auto root = LoadYamlFile(path);
 		if (root["resources"] && root["resources"].IsSequence())
 		{
 			for (const auto &resourceNode : root["resources"])
 			{
 				const auto resourceID = ParseResourceID(resourceNode["id"]);
-				const auto streamIndex = ParseUnsignedScalar<uint8_t>(resourceNode["streamIndex"]).value_or(0);
+				const auto streamIndex = ParseOptionalUnsignedScalar<uint8_t>(resourceNode["streamIndex"], 0);
 				const auto imports = ParseImportList(resourceNode["imports"]);
-				if (!resourceID || !imports)
+				if (!resourceID || !streamIndex || !imports)
 					continue;
 
-				importsByResource[{ *resourceID, streamIndex }] = *imports;
+				importsByResource[{ *resourceID, *streamIndex }] = *imports;
 			}
 			return importsByResource;
 		}
@@ -543,9 +583,15 @@ bool Bundle::ExportProject(const std::filesystem::path &directory, const Project
 		YAML::Node binariesNode;
 		const auto resourceFolder = options.sortByType ? std::filesystem::path(TypeFolderName(resource)) : std::filesystem::path();
 		const auto resourceStem = ResourceStem(resource);
+
+		// Fetch and decompress the resource once, then read its blocks from that copy.
+		const auto resourceData = resource.memoryBlocks.empty() ? std::nullopt : GetResource(resource.resourceID, resource.streamIndex);
 		for (const auto &block : resource.memoryBlocks)
 		{
-			const auto buffer = GetBinary(resource.resourceID, block.memoryType, resource.streamIndex);
+			if (!resourceData)
+				return fail(ErrorCode::ResourceNotFound, "Could not read resource data for project export.");
+
+			const auto &buffer = resourceData->GetBinary(block.memoryType);
 			if (buffer == nullptr)
 				continue;
 
@@ -611,7 +657,7 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 		if (!std::filesystem::exists(metadataPath))
 			return fail("Project metadata file was not found.");
 
-		const auto root = YAML::LoadFile(metadataPath.string());
+		const auto root = LoadYamlFile(metadataPath);
 		const auto bundleNode = root["bundle"];
 		const auto resourcesNode = root["resources"];
 		if (!bundleNode || !resourcesNode)
@@ -645,10 +691,12 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 		for (const auto &resourceNode : resourcesNode)
 		{
 			const auto resourceID = ParseResourceID(resourceNode["id"]);
-			const auto streamIndex = ParseUnsignedScalar<uint8_t>(resourceNode["streamIndex"]).value_or(0);
+			const auto parsedStreamIndex = ParseOptionalUnsignedScalar<uint8_t>(resourceNode["streamIndex"], 0);
 			const auto resourceType = ParseUnsignedScalar<uint32_t>(resourceNode["type"]);
-			if (!resourceID || !resourceType)
+			if (!resourceID || !parsedStreamIndex || !resourceType)
 				return fail("Project resource metadata is invalid.");
+
+			const auto streamIndex = *parsedStreamIndex;
 
 			Resource resource(*resourceType);
 			const auto binariesNode = resourceNode["binaries"];
@@ -673,7 +721,11 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 						return fail("Project binary block is missing a path.");
 
 					relativePath = blockNode["path"].Scalar();
-					alignment = ParseUnsignedScalar<uint32_t>(blockNode["alignment"]).value_or(1);
+					const auto parsedAlignment = ParseOptionalUnsignedScalar<uint32_t>(blockNode["alignment"], 1);
+					if (!parsedAlignment)
+						return fail("Project binary block has an invalid alignment.");
+
+					alignment = *parsedAlignment;
 				}
 
 				const auto bufferData = ReadBinaryFile(directory / relativePath);
@@ -688,7 +740,7 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 			{
 				if (resourceNode["imports"].IsScalar())
 				{
-					const auto importRoot = YAML::LoadFile((directory / resourceNode["imports"].Scalar()).string());
+					const auto importRoot = LoadYamlFile(directory / resourceNode["imports"].Scalar());
 					const auto parsedImports = ParseImportList(importRoot);
 					if (!parsedImports)
 						return fail("Project imports file is invalid.");
@@ -729,8 +781,9 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 		if (bundleNode["defaultResource"])
 		{
 			const auto defaultResourceID = ParseResourceID(bundleNode["defaultResource"]["id"]);
-			const auto defaultStreamIndex = ParseSignedScalar(bundleNode["defaultResource"]["streamIndex"]).value_or(0);
-			if (!defaultResourceID || !imported.SetDefaultResource(*defaultResourceID, defaultStreamIndex))
+			const auto defaultStreamIndexNode = bundleNode["defaultResource"]["streamIndex"];
+			const auto defaultStreamIndex = defaultStreamIndexNode ? ParseSignedScalar(defaultStreamIndexNode) : std::optional<int32_t>(0);
+			if (!defaultResourceID || !defaultStreamIndex || !imported.SetDefaultResource(*defaultResourceID, *defaultStreamIndex))
 				return fail("Project default resource is invalid.");
 		}
 

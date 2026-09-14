@@ -25,6 +25,30 @@ namespace
 			return std::make_unique<Formats::Bnd2>();
 		return {};
 	}
+
+	// Returns an empty message on success. binaryio reports overflow by throwing std::out_of_range.
+	std::string SaveImplementation(Formats::Base &impl, binaryio::BinaryWriter &writer, ErrorCode &code)
+	{
+		code = ErrorCode::ValidationFailed;
+		try
+		{
+			if (!impl.Save(writer))
+				return "Bundle failed format validation while saving.";
+		}
+		catch (const std::out_of_range &error)
+		{
+			code = ErrorCode::OutOfRange;
+			return std::string("Bundle writer exceeded its addressable range. ") + error.what();
+		}
+		catch (const std::exception &)
+		{
+			code = ErrorCode::GenericFailure;
+			return "Bundle writer threw while saving.";
+		}
+
+		code = ErrorCode::Success;
+		return {};
+	}
 }
 
 ResourceID::ResourceID(std::string name) noexcept
@@ -123,14 +147,14 @@ bool Bundle::Load(std::span<const uint8_t> data)
 	std::vector<uint8_t> buffer(data.begin(), data.end());
 	auto reader = binaryio::BinaryReader(buffer, std::endian::little);
 
-	// Check if it's a BNDL archive
-	m_impl = MakeBundleImplementation(reader.ReadString(4));
-	if (!m_impl)
+	// Parse into a new implementation and swap it in on success, so a failed load keeps the current bundle.
+	auto impl = MakeBundleImplementation(reader.ReadString(4));
+	if (!impl)
 		return Fail(ErrorCode::UnsupportedFormat, "Unsupported bundle magic.");
 
 	try
 	{
-		if (!m_impl->Load(reader))
+		if (!impl->Load(reader))
 			return Fail(ErrorCode::InvalidBundle, "Bundle parser rejected the input.");
 	}
 	catch (const std::out_of_range &error)
@@ -146,6 +170,7 @@ bool Bundle::Load(std::span<const uint8_t> data)
 		return Fail(ErrorCode::InvalidBundle, "Bundle parser failed while reading the input.");
 	}
 
+	m_impl = std::move(impl);
 	ClearLastError();
 	return true;
 }
@@ -156,9 +181,9 @@ bool Bundle::Save(const std::filesystem::path &path)
 		return Fail(ErrorCode::InvalidState, "Cannot save an empty bundle.");
 
 	auto writer = binaryio::BinaryWriter();
-
-	if (!m_impl->Save(writer))
-		return Fail(ErrorCode::ValidationFailed, "Bundle failed format validation while saving.");
+	auto code = ErrorCode::Success;
+	if (auto message = SaveImplementation(*m_impl, writer, code); code != ErrorCode::Success)
+		return Fail(code, std::move(message));
 
 	const auto stream = writer.GetStream();
 
@@ -181,9 +206,10 @@ std::vector<uint8_t> Bundle::SaveToMemory()
 	}
 
 	auto writer = binaryio::BinaryWriter();
-	if (!m_impl->Save(writer))
+	auto code = ErrorCode::Success;
+	if (auto message = SaveImplementation(*m_impl, writer, code); code != ErrorCode::Success)
 	{
-		SetLastError(ErrorCode::ValidationFailed, "Bundle failed format validation while saving.");
+		SetLastError(code, std::move(message));
 		return {};
 	}
 
@@ -429,7 +455,10 @@ std::string Bundle::GetStreamName(uint8_t index) const
 
 bool Bundle::SetDefaultResource(ResourceID resourceID, int32_t streamIndex)
 {
-	if (!m_impl || streamIndex < 0 || streamIndex > std::numeric_limits<uint8_t>::max())
+	if (!m_impl)
+		return Fail(ErrorCode::InvalidState, "Cannot set a default resource on an empty bundle.");
+
+	if (streamIndex < 0 || streamIndex > std::numeric_limits<uint8_t>::max())
 		return Fail(ErrorCode::InvalidArgument, "Default resource stream index is invalid.");
 
 	if (!m_impl->SetDefaultResource({ resourceID, static_cast<uint8_t>(streamIndex) }))

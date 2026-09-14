@@ -93,7 +93,7 @@ bool Bnd2::Load(binaryio::BinaryReader &reader)
 		if (resourceID == 0)
 			return false;
 
-		ResourceEntry e;
+		ResourceEntry e{};
 
 		if (m_version < 5)
 			e.importHash = reader.Read<uint64_t>();

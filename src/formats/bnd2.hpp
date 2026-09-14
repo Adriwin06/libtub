@@ -9,7 +9,7 @@ namespace libtub::Formats
 		using Base::Base;
 
 		bool Load(binaryio::BinaryReader &reader) override;
-		bool Save(binaryio::BinaryWriter &reader) override;
+		bool Save(binaryio::BinaryWriter &writer) override;
 
 		[[nodiscard]] constexpr Magic GetMagic() const override { return Magic::Bnd2; }
 
