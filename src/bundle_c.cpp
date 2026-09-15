@@ -567,7 +567,7 @@ libtub_error libtub_resource_copy_import(const libtub_resource *LIBTUB_NONNULL r
 	if (index >= imports.size())
 		return LIBTUB_ERROR_OUT_OF_RANGE;
 
-	*import = new (std::nothrow) libtub_import(Import(imports[index]));
+	*import = new (std::nothrow) libtub_import(imports[index]);
 	if (*import == nullptr)
 		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 

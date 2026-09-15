@@ -1,9 +1,11 @@
 #include "bnd2.hpp"
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <format>
 #include <limits>
 #include <ranges>
+#include <span>
 
 using namespace libtub;
 using namespace libtub::Formats;

@@ -1,4 +1,5 @@
 #include "bndl.hpp"
+#include <cassert>
 #include <cstring>
 
 using namespace libtub;
