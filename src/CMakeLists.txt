@@ -168,6 +168,9 @@ if(LIBTUB_BUILD_PROJECT_SUPPORT)
     target_link_libraries(libtub PRIVATE $<BUILD_LOCAL_INTERFACE:$<TARGET_LINKER_FILE:${LIBTUB_YAML_TARGET}>>)
     if(BUILD_SHARED_LIBS)
         set_property(TARGET libtub PROPERTY INTERFACE_LINK_LIBRARIES "")
+        # Linking yaml-cpp by file keeps its directory off libtub's build-tree RPATH. macOS resolves yaml-cpp's
+        # @rpath install name through that list, so the tests and tools can't load libtub without this entry.
+        set_property(TARGET libtub APPEND PROPERTY BUILD_RPATH "$<TARGET_FILE_DIR:${LIBTUB_YAML_TARGET}>")
     else()
         target_compile_definitions(libtub PRIVATE YAML_CPP_STATIC_DEFINE)
     endif()

@@ -23,22 +23,22 @@
 
 namespace libtub::Formats
 {
-	inline unsigned long BitScanReverse(unsigned long input)
+	// Index of the highest set bit, or 0 for 0. The result is uint32_t because unsigned long is 64-bit on Linux and
+	// macOS, and OR-ing a wider result into a 32-bit BND2 field makes binaryio write 8 bytes.
+	inline uint32_t BitScanReverse(uint32_t input)
 	{
 		if (input == 0)
 			return 0;
 
-		unsigned long result;
-
 #if defined(_MSC_VER)
+		unsigned long result;
 		_BitScanReverse(&result, input);
-#elif __has_builtin(__builtin_clzl) || defined(__GNUC__)
-		result = static_cast<unsigned long>(std::numeric_limits<unsigned long>::digits - 1 - __builtin_clzl(input));
+		return static_cast<uint32_t>(result);
+#elif __has_builtin(__builtin_clz) || defined(__GNUC__)
+		return static_cast<uint32_t>(std::numeric_limits<uint32_t>::digits - 1 - __builtin_clz(input));
 #else
-		result = std::bit_width(input | 1U) - 1;
+		return static_cast<uint32_t>(std::bit_width(input) - 1);
 #endif
-
-		return result;
 	}
 
 	using ResourceKey = std::pair<ResourceID, uint8_t>;

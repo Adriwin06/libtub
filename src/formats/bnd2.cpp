@@ -296,7 +296,7 @@ ErrorCode Bnd2::Save(binaryio::BinaryWriter &writer)
 		{
 			const auto mappedBlock = MapFileBlockToLibBlock(j);
 			if (mappedBlock)
-				writer.Write(e.descriptors[*mappedBlock].uncompressedSize | (BitScanReverse(e.descriptors[*mappedBlock].uncompressedAlignment) << 28));
+				writer.Write<uint32_t>(e.descriptors[*mappedBlock].uncompressedSize | (BitScanReverse(e.descriptors[*mappedBlock].uncompressedAlignment) << 28));
 			else
 				writer.Write<uint32_t>(0);
 		}
@@ -305,7 +305,7 @@ ErrorCode Bnd2::Save(binaryio::BinaryWriter &writer)
 		{
 			const auto mappedBlock = MapFileBlockToLibBlock(j);
 			if (mappedBlock)
-				writer.Write(e.descriptors[*mappedBlock].onDiskSize | (BitScanReverse(e.descriptors[*mappedBlock].onDiskAlignment) << 28));
+				writer.Write<uint32_t>(e.descriptors[*mappedBlock].onDiskSize | (BitScanReverse(e.descriptors[*mappedBlock].onDiskAlignment) << 28));
 			else
 				writer.Write<uint32_t>(0);
 		}
