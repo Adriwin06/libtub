@@ -87,8 +87,8 @@ namespace libtub::Formats
 		Base &operator=(Base &&) = delete;
 		virtual ~Base() = default;
 
-		virtual bool Load(binaryio::BinaryReader &reader) = 0;
-		virtual bool Save(binaryio::BinaryWriter &writer) = 0;
+		virtual ErrorCode Load(binaryio::BinaryReader &reader) = 0;
+		virtual ErrorCode Save(binaryio::BinaryWriter &writer) = 0;
 
 		[[nodiscard]] virtual constexpr Magic GetMagic() const = 0;
 		[[nodiscard]] constexpr uint16_t GetVersion() const { return m_version; }
@@ -97,8 +97,12 @@ namespace libtub::Formats
 
 		[[nodiscard]] std::optional<ResourceDebugDataEntry> GetResourceDebugData(ResourceKey resourceKey) const;
 		[[nodiscard]] std::optional<uint32_t> GetResourceType(ResourceKey resourceKey) const;
+		// Returns std::nullopt when the resource is missing or one of its populated blocks can't be decoded.
 		[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceKey resourceKey) const = 0;
-		[[nodiscard]] Buffer GetBinary(ResourceKey resourceKey, MemoryType memoryType) const;
+		// Decodes one block the way GetResource returns it. Blocks without data give an empty buffer; a missing
+		// resource or undecodable block gives std::nullopt.
+		[[nodiscard]] virtual std::optional<Buffer> GetResourceBinary(ResourceKey resourceKey, MemoryType memoryType) const;
+		[[nodiscard]] bool HasResource(ResourceKey resourceKey) const { return m_entries.contains(resourceKey); }
 
 		bool AddResource(ResourceKey resourceKey, const Resource &data);
 		bool AddResourceDebugData(ResourceKey resourceID, std::string name, std::string typeName);
@@ -107,6 +111,7 @@ namespace libtub::Formats
 
 		[[nodiscard]] uint32_t GetResourceCount() const { return static_cast<uint32_t>(m_entries.size()); }
 		[[nodiscard]] std::vector<ResourceID> GetResourceIDs() const;
+		[[nodiscard]] std::vector<ResourceKey> GetResourceKeys() const;
 		[[nodiscard]] std::map<uint32_t, std::vector<ResourceID>> GetResourceIDsByType() const;
 		[[nodiscard]] std::vector<uint8_t> GetResourceStreamIndices(ResourceID resourceID) const;
 
@@ -120,6 +125,8 @@ namespace libtub::Formats
 
 	protected:
 		static constexpr const uint8_t kStreamLimit = 4;
+		// A serialised import: a 64-bit resource ID and a 32-bit offset/kind field, padded to 8 bytes.
+		static constexpr const size_t kImportEntrySize = 16;
 
 		std::map<ResourceKey, ResourceEntry> m_entries;
 		std::map<ResourceKey, ResourceDebugDataEntry> m_debugDataEntries;
@@ -134,6 +141,10 @@ namespace libtub::Formats
 		[[nodiscard]] virtual bool IsValidPlatform() const;
 
 		[[nodiscard]] std::endian GetPlatformEndian() const;
+
+		// Decompresses or copies one stored block. Returns an empty buffer for a block without data and
+		// std::nullopt when the stored data can't be decoded.
+		[[nodiscard]] std::optional<Buffer> DecodeBinary(ResourceKey resourceKey, MemoryType memoryType) const;
 
 		void ParseDebugData(const std::string &rstXML);
 		[[nodiscard]] std::string GenerateDebugData() const;

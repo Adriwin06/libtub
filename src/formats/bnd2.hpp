@@ -8,12 +8,13 @@ namespace libtub::Formats
 	public:
 		using Base::Base;
 
-		bool Load(binaryio::BinaryReader &reader) override;
-		bool Save(binaryio::BinaryWriter &writer) override;
+		ErrorCode Load(binaryio::BinaryReader &reader) override;
+		ErrorCode Save(binaryio::BinaryWriter &writer) override;
 
 		[[nodiscard]] constexpr Magic GetMagic() const override { return Magic::Bnd2; }
 
 		[[nodiscard]] std::optional<Resource> GetResource(ResourceKey resourceKey) const override;
+		[[nodiscard]] std::optional<Buffer> GetResourceBinary(ResourceKey resourceKey, MemoryType memoryType) const override;
 
 		[[nodiscard]] ResourceID GetDefaultResourceID() const override;
 		[[nodiscard]] int32_t GetDefaultResourceStreamIndex() const override;

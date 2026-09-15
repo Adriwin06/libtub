@@ -9,7 +9,7 @@ namespace
 	constexpr uint64_t kResourceStringTableID = 0xC039284A;
 }
 
-bool Bndl::Load(binaryio::BinaryReader &reader)
+ErrorCode Bndl::Load(binaryio::BinaryReader &reader)
 {
 	auto version = reader.Read<uint32_t>();
 	if ((version & 0xFFFF) == 0)
@@ -20,7 +20,7 @@ bool Bndl::Load(binaryio::BinaryReader &reader)
 	}
 	m_version = static_cast<uint16_t>(version);
 	if (version < 3 || version > 5)
-		return false;
+		return ErrorCode::UnsupportedVersion;
 
 	std::optional<Platform> detectedPlatform;
 	auto platformReader = reader;
@@ -35,7 +35,7 @@ bool Bndl::Load(binaryio::BinaryReader &reader)
 		}
 	}
 	if (!detectedPlatform.has_value())
-		return false;
+		return ErrorCode::UnsupportedPlatform;
 	m_platform = *detectedPlatform;
 
 	const auto numEntries = reader.Read<uint32_t>();
@@ -60,7 +60,7 @@ bool Bndl::Load(binaryio::BinaryReader &reader)
 	reader.Skip<uint32_t>(); // start of data block
 
 	if (reader.Read<uint32_t>() != static_cast<uint32_t>(m_platform))
-		return false;
+		return ErrorCode::InvalidBundle;
 
 	auto compressed = 0U;
 	auto uncompInfoOffset = 0U;
@@ -193,13 +193,14 @@ bool Bndl::Load(binaryio::BinaryReader &reader)
 			m_imports[resourceID].emplace_back(ReadImport(reader));
 	}
 
-	auto rstFile = GetBinary({ ResourceID(kResourceStringTableID), static_cast<uint8_t>(0) }, MemoryType::MainMemory);
-	if (rstFile == nullptr)
-		return true;
+	// Keep an undecodable string table as an ordinary resource, so Save writes its bytes back unchanged.
+	const auto rstFile = DecodeBinary({ ResourceID(kResourceStringTableID), static_cast<uint8_t>(0) }, MemoryType::MainMemory);
+	if (!rstFile || *rstFile == nullptr)
+		return ErrorCode::Success;
 
 	m_flags |= Flags::HasDebugData;
 
-	auto rstReader = binaryio::BinaryReader(rstFile);
+	auto rstReader = binaryio::BinaryReader(*rstFile);
 
 	const auto strLen = rstReader.Read<uint32_t>();
 	auto rstXML = rstReader.ReadString(strLen);
@@ -215,23 +216,23 @@ bool Bndl::Load(binaryio::BinaryReader &reader)
 
 	m_entries.erase({ ResourceID(kResourceStringTableID), static_cast<uint8_t>(0) });
 
-	return true;
+	return ErrorCode::Success;
 };
 
-bool Bndl::Save(binaryio::BinaryWriter &writer)
+ErrorCode Bndl::Save(binaryio::BinaryWriter &writer)
 {
 	if (m_version < 3 || m_version > 5)
-		return false;
+		return ErrorCode::UnsupportedVersion;
 
 	// Only one flag is supported. Allow HasDebugData since we simulate it ourselves here.
 	if (BitScanReverse(static_cast<uint32_t>(m_flags & ~Flags::HasDebugData)) >= 1)
-		return false;
+		return ErrorCode::UnsupportedFlags;
 
 	if (m_version <= 3 && (m_flags & Flags::Compressed))
-		return false; // Invalid combination
+		return ErrorCode::UnsupportedFlags; // Invalid combination
 
 	if (!IsValidPlatform())
-		return false;
+		return ErrorCode::UnsupportedPlatform;
 
 	writer.SetEndian(GetPlatformEndian());
 
@@ -468,7 +469,7 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 	if (writeDebugData)
 		m_entries.erase(debugDataKey);
 
-	return true;
+	return ErrorCode::Success;
 }
 
 void Bndl::StoreSeparateImports(ResourceKey resourceKey, const std::vector<Import> &imports)
@@ -532,13 +533,19 @@ std::optional<Resource> Bndl::GetResource(ResourceKey resourceKey) const
 
 	std::array<Buffer, 4> buffers;
 	for (const auto &memoryType : GetMemoryTypes())
-		buffers[LIBTUB_TO_UNDERLYING(memoryType)] = GetBinary(resourceKey, memoryType);
+	{
+		auto buffer = DecodeBinary(resourceKey, memoryType);
+		if (!buffer)
+			return {};
+
+		buffers[LIBTUB_TO_UNDERLYING(memoryType)] = std::move(*buffer);
+	}
 
 	std::vector<Import> imports;
-	if (it->second.importCount > 0)
+	const auto importsIt = m_imports.find(resourceKey.first);
+	if (it->second.importCount > 0 && importsIt != m_imports.end())
 	{
-		const auto &importEntries = m_imports.at(resourceKey.first);
-		for (const auto &importEntry : importEntries)
+		for (const auto &importEntry : importsIt->second)
 			imports.emplace_back(importEntry.resourceID, importEntry.offset, importEntry.type);
 	}
 

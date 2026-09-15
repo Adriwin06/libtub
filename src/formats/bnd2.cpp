@@ -8,7 +8,7 @@
 using namespace libtub;
 using namespace libtub::Formats;
 
-bool Bnd2::Load(binaryio::BinaryReader &reader)
+ErrorCode Bnd2::Load(binaryio::BinaryReader &reader)
 {
 	auto version = reader.Read<uint32_t>();
 	if ((version & 0xFF) == 0)
@@ -24,7 +24,7 @@ bool Bnd2::Load(binaryio::BinaryReader &reader)
 	}
 	m_version = static_cast<uint16_t>(version);
 	if (m_version != 2 && m_version != 3 && m_version != 5)
-		return false;
+		return ErrorCode::UnsupportedVersion;
 
 	if (m_version >= 5)
 	{
@@ -48,7 +48,7 @@ bool Bnd2::Load(binaryio::BinaryReader &reader)
 			m_platform = static_cast<Platform>(rawPlatform);
 	}
 	if (!IsValidPlatform())
-		return false;
+		return ErrorCode::UnsupportedPlatform;
 
 	const auto rstOffset = reader.Read<uint32_t>();
 	const auto numEntries = reader.Read<uint32_t>();
@@ -63,7 +63,7 @@ bool Bnd2::Load(binaryio::BinaryReader &reader)
 	};
 
 	if (fileBlockOffsets[blocks - 1] > reader.GetBuffer().size())
-		return false;
+		return ErrorCode::InvalidBundle;
 
 	m_flags = Flags(reader.Read<uint32_t>());
 	if (m_version >= 5)
@@ -91,7 +91,7 @@ bool Bnd2::Load(binaryio::BinaryReader &reader)
 	{
 		const auto resourceID = ResourceID(reader.Read<uint64_t>());
 		if (resourceID == 0)
-			return false;
+			return ErrorCode::InvalidBundle;
 
 		ResourceEntry e{};
 
@@ -149,7 +149,7 @@ bool Bnd2::Load(binaryio::BinaryReader &reader)
 		
 		const auto streamIndex = reader.Read<uint8_t>();
 		if (streamIndex != 0 && !(m_flags & Flags::MultistreamBundle))
-			return false;
+			return ErrorCode::InvalidBundle;
 		m_entries.emplace(std::make_pair(resourceID, streamIndex), std::move(e));
 
 		reader.Align(8);
@@ -161,22 +161,22 @@ bool Bnd2::Load(binaryio::BinaryReader &reader)
 		ParseDebugData(reader.ReadString());
 	}
 
-	return true;
+	return ErrorCode::Success;
 };
 
-bool Bnd2::Save(binaryio::BinaryWriter &writer)
+ErrorCode Bnd2::Save(binaryio::BinaryWriter &writer)
 {
 	if (m_version != 2 && m_version != 3 && m_version != 5)
-		return false;
+		return ErrorCode::UnsupportedVersion;
 
 	// For version 2, only the first 4 flags are supported. 7 for version 3.
 	if ((m_version == 2 && BitScanReverse(static_cast<uint32_t>(m_flags)) >= 4) ||
 		(m_version == 3 && BitScanReverse(static_cast<uint32_t>(m_flags)) >= 7) ||
 		(m_version == 5 && (m_flags & (Flags::MainMemOptimised | Flags::GraphicsMemOptimised))))
-		return false;
+		return ErrorCode::UnsupportedFlags;
 
 	if (!IsValidPlatform())
-		return false;
+		return ErrorCode::UnsupportedPlatform;
 
 	writer.Write("bnd2", 4);
 	writer.SetEndian(GetPlatformEndian());
@@ -388,7 +388,7 @@ bool Bnd2::Save(binaryio::BinaryWriter &writer)
 		writer.Align(lastAlignment);
 	}
 
-	return true;
+	return ErrorCode::Success;
 }
 
 std::optional<Resource> Bnd2::GetResource(ResourceKey resourceKey) const
@@ -399,14 +399,20 @@ std::optional<Resource> Bnd2::GetResource(ResourceKey resourceKey) const
 
 	std::array<Buffer, 4> buffers;
 	for (const auto &memoryType : GetMemoryTypes())
-		buffers[LIBTUB_TO_UNDERLYING(memoryType)] = GetBinary(resourceKey, memoryType);
+	{
+		auto buffer = DecodeBinary(resourceKey, memoryType);
+		if (!buffer)
+			return {};
+
+		buffers[LIBTUB_TO_UNDERLYING(memoryType)] = std::move(*buffer);
+	}
 
 	std::vector<Import> imports;
 	const auto numImports = it->second.importCount;
 	if (numImports > 0)
 	{
 		const auto importOffset = static_cast<size_t>(it->second.importOffset);
-		if (buffers[0] == nullptr || importOffset > buffers[0].GetSize())
+		if (buffers[0] == nullptr || importOffset > buffers[0].GetSize() || (buffers[0].GetSize() - importOffset) / kImportEntrySize < numImports)
 			return {};
 
 		imports.reserve(numImports);
@@ -426,6 +432,27 @@ std::optional<Resource> Bnd2::GetResource(ResourceKey resourceKey) const
 	}
 
 	return Resource{ std::move(buffers), std::move(imports), it->second.resourceType };
+}
+
+std::optional<Buffer> Bnd2::GetResourceBinary(ResourceKey resourceKey, MemoryType memoryType) const
+{
+	auto buffer = DecodeBinary(resourceKey, memoryType);
+	if (!buffer || memoryType != MemoryType::MainMemory)
+		return buffer;
+
+	// Strip the import trailer, as GetResource does.
+	const auto &e = m_entries.at(resourceKey);
+	if (e.importCount == 0)
+		return buffer;
+
+	const auto importOffset = static_cast<size_t>(e.importOffset);
+	if (*buffer == nullptr || importOffset > buffer->GetSize() || (buffer->GetSize() - importOffset) / kImportEntrySize < e.importCount)
+		return {};
+
+	auto stripped = std::make_unique_for_overwrite<uint8_t[]>(importOffset);
+	if (importOffset > 0)
+		std::memcpy(stripped.get(), buffer->GetData(), importOffset);
+	return Buffer{ std::move(stripped), importOffset, buffer->GetAlignment() };
 }
 
 ResourceID Bnd2::GetDefaultResourceID() const
