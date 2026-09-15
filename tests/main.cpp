@@ -12,8 +12,34 @@
 #include <string>
 #include <vector>
 
+#if defined(_MSC_VER)
+#	include <crtdbg.h>
+#	include <cstdio>
+#	include <cstdlib>
+#endif
+
 namespace
 {
+#if defined(_MSC_VER)
+	// The Debug CRT opens modal dialogs for failed assertions and invalid parameters, which blocks unattended
+	// runs. Report them on stderr so the process fails without waiting for input.
+	void ReportInvalidParameter(const wchar_t *, const wchar_t *, const wchar_t *, unsigned int, uintptr_t)
+	{
+		std::fputs("CRT invalid parameter detected\n", stderr);
+		std::_Exit(3);
+	}
+
+	void DisableCrtDialogs()
+	{
+		_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+		_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+		_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+		_CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+		_set_invalid_parameter_handler(ReportInvalidParameter);
+		_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+	}
+#endif
+
 	libtub::Buffer MakeBuffer(const std::vector<uint8_t> &bytes, uint32_t alignment = 1)
 	{
 		auto data = std::make_unique_for_overwrite<uint8_t[]>(bytes.size());
@@ -726,6 +752,10 @@ namespace
 
 int main()
 {
+#if defined(_MSC_VER)
+	DisableCrtDialogs();
+#endif
+
 	bool ok = true;
 	ok &= TestBnd2ImportRoundTrips();
 #ifndef LIBTUB_SKIP_PROJECT_TESTS
