@@ -311,7 +311,7 @@ int main(int argc, char **argv)
 							case MemoryType::MainMemory:
 								typeExt = ".mainmem";
 								break;
-							// Distinct extensions per block, otherwise both graphics blocks on Wii U and PS Vita were written to the same ".dummy" file.
+							// Each block needs its own extension. Wii U and PS Vita graphics blocks used to share ".dummy" and overwrite each other.
 							case MemoryType::GraphicsSystem:
 								if (platform == Platform::PS3 || platform == Platform::PSVita)
 									typeExt = ".gfxsysmem";

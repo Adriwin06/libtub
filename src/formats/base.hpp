@@ -97,10 +97,10 @@ namespace libtub::Formats
 
 		[[nodiscard]] std::optional<ResourceDebugDataEntry> GetResourceDebugData(ResourceKey resourceKey) const;
 		[[nodiscard]] std::optional<uint32_t> GetResourceType(ResourceKey resourceKey) const;
-		// Returns nothing when the resource is missing or one of its populated blocks can't be decoded.
+		// Returns std::nullopt when the resource is missing or one of its populated blocks can't be decoded.
 		[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceKey resourceKey) const = 0;
-		// Decodes a single block as GetResource would return it: an empty buffer when the block has no data,
-		// nothing when the resource is missing or the block can't be decoded.
+		// Decodes one block the way GetResource returns it. Blocks without data give an empty buffer; a missing
+		// resource or undecodable block gives std::nullopt.
 		[[nodiscard]] virtual std::optional<Buffer> GetResourceBinary(ResourceKey resourceKey, MemoryType memoryType) const;
 		[[nodiscard]] bool HasResource(ResourceKey resourceKey) const { return m_entries.contains(resourceKey); }
 
@@ -125,7 +125,7 @@ namespace libtub::Formats
 
 	protected:
 		static constexpr const uint8_t kStreamLimit = 4;
-		// A serialised import: 64-bit resource ID, 32-bit offset/kind, padded to 8 bytes.
+		// A serialised import: a 64-bit resource ID and a 32-bit offset/kind field, padded to 8 bytes.
 		static constexpr const size_t kImportEntrySize = 16;
 
 		std::map<ResourceKey, ResourceEntry> m_entries;
@@ -136,14 +136,14 @@ namespace libtub::Formats
 		Flags m_flags;
 
 		[[nodiscard]] virtual constexpr bool AppendsImportsToResource() const = 0;
-		// Called by ReplaceResource for formats that keep imports outside the resource payload.
+		// ReplaceResource calls this for formats that keep imports outside the resource payload (BNDL).
 		virtual void StoreSeparateImports(ResourceKey, const std::vector<Import> &) {}
 		[[nodiscard]] virtual bool IsValidPlatform() const;
 
 		[[nodiscard]] std::endian GetPlatformEndian() const;
 
-		// Decompresses (or copies) one stored block. Unlike an empty buffer, nothing means the block holds
-		// data that could not be decoded.
+		// Decompresses or copies one stored block. Returns an empty buffer for a block without data and
+		// std::nullopt when the stored data can't be decoded.
 		[[nodiscard]] std::optional<Buffer> DecodeBinary(ResourceKey resourceKey, MemoryType memoryType) const;
 
 		void ParseDebugData(const std::string &rstXML);

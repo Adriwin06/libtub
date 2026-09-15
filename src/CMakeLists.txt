@@ -111,8 +111,8 @@ function(configure_libtub_library target_name)
     endif()
 endfunction()
 
-# Copies the DLLs an executable linked against libtub needs next to it. yaml-cpp is listed explicitly
-# because libtub links it by file, so $<TARGET_RUNTIME_DLLS> can't see it.
+# Copies the DLLs a libtub executable needs into its output directory. libtub links yaml-cpp by file,
+# which hides it from $<TARGET_RUNTIME_DLLS>, so the function appends yaml-cpp's DLL itself.
 function(libtub_copy_runtime_dlls target_name)
     if(NOT WIN32 OR NOT BUILD_SHARED_LIBS)
         return()
@@ -184,7 +184,7 @@ else()
 endif()
 
 if(NOT BUILD_SHARED_LIBS)
-    # binaryio is header-only, so only the compiled dependencies are installed.
+    # binaryio is header-only, so the install step only copies the compiled dependencies.
     set(LIBTUB_STATIC_DEPENDENCY_TARGETS "")
     if(TARGET zlibstatic)
         list(APPEND LIBTUB_STATIC_DEPENDENCY_TARGETS zlibstatic)

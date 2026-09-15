@@ -172,7 +172,7 @@ bool Bundle::Load(std::span<const uint8_t> data)
 	std::vector<uint8_t> buffer(data.begin(), data.end());
 	auto reader = binaryio::BinaryReader(buffer, std::endian::little);
 
-	// Parse into a fresh implementation so a failed load leaves the current bundle untouched.
+	// Parse into a new implementation and swap it in on success, so a failed load keeps the current bundle.
 	auto impl = MakeBundleImplementation(reader.ReadString(4));
 	if (!impl)
 		return Fail(ErrorCode::UnsupportedFormat, "Unsupported bundle magic.");
@@ -328,7 +328,7 @@ Buffer Bundle::GetBinary(ResourceID resourceID, MemoryType memoryType, uint8_t s
 		return {};
 	}
 
-	// Decode only the requested block rather than the whole resource.
+	// Decode the requested block on its own.
 	const Formats::ResourceKey resourceKey{ resourceID, streamIndex };
 	auto buffer = m_impl->GetResourceBinary(resourceKey, memoryType);
 	if (!buffer)
@@ -560,7 +560,7 @@ std::vector<ResourceDescriptor> Bundle::DescribeResources() const
 		return std::tie(lhs.resourceType, lhs.resourceID, lhs.streamIndex) < std::tie(rhs.resourceType, rhs.resourceID, rhs.streamIndex);
 	});
 
-	// Still describe what can be read, but don't let corrupt resources disappear silently.
+	// Return the readable resources, and set an error so callers can tell that some were skipped.
 	if (unreadableResources > 0)
 	{
 		SetLastError(ErrorCode::DecompressionFailed, std::to_string(unreadableResources) + " resource(s) could not be decoded and were left out; the bundle may be corrupt.");

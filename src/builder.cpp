@@ -178,8 +178,8 @@ bool BundleResourceBuilder::Validate()
 	if (m_streamIndex >= 4)
 		return Fail("Stream index must be in the range 0..3.");
 
-	// BNDL has no per-resource stream index, and BND2 v2 can't store the multistream flag that a
-	// non-zero stream implies, so either would only fail later when the bundle is saved.
+	// BNDL has no per-resource stream index, and BND2 v2 can't store the multistream flag a non-zero
+	// stream needs. Save would reject both later, so catch them here.
 	const bool isBnd2 = m_bundle->GetMagic() == Magic::Bnd2;
 	if (m_streamIndex != 0 && (!isBnd2 || m_bundle->GetVersion() < 3))
 		return Fail("Stream indices other than 0 require a BND2 v3 or later bundle.");

@@ -86,9 +86,9 @@ bool Base::AddResource(ResourceKey resourceKey, const Resource &resource)
 	if (resourceKey.second != 0)
 		m_flags |= Flags::MultistreamBundle;
 
-	// New entries need an on-disk alignment. It's not clear how this is determined (see ReplaceResource)
-	// so we'll just assume 1. This also covers empty blocks in compressed bundles, which ReplaceResource
-	// leaves untouched and which the BND2 writer aligns to (an alignment of 0 would divide by zero).
+	// New entries need an on-disk alignment. We don't know how the original tools pick it (see ReplaceResource),
+	// so we assume 1. Empty blocks in compressed bundles keep this value because ReplaceResource skips
+	// them, and the BND2 writer divides by it.
 	for (const auto &memoryType : GetMemoryTypes())
 	{
 		auto &descriptor = e.descriptors[LIBTUB_TO_UNDERLYING(memoryType)];
@@ -97,7 +97,7 @@ bool Base::AddResource(ResourceKey resourceKey, const Resource &resource)
 
 	if (!ReplaceResource(resourceKey, resource))
 	{
-		// Don't leave a half-initialised entry (or the multistream flag it implied) behind.
+		// Remove the half-initialised entry and restore the flags it may have changed.
 		m_entries.erase(resourceKey);
 		m_flags = previousFlags;
 		return false;
@@ -156,10 +156,9 @@ bool Base::ReplaceResource(ResourceKey resourceKey, const Resource &resource)
 		if (AppendsImportsToResource() && memoryType == MemoryType::MainMemory && !imports.empty())
 		{
 			binaryio::BinaryWriter writer;
-			// BND2 stores its import trailer inside the resource payload. The
-			// trailer follows the bundle platform just like every surrounding
-			// table; leaving this writer at host endianness corrupts IDs and
-			// offsets whenever a big-endian bundle is built or re-saved.
+			// BND2 stores the import trailer inside the resource payload, in the
+			// bundle platform's byte order like the other tables. A host-endian
+			// writer corrupts the IDs and offsets of big-endian bundles.
 			writer.SetEndian(GetPlatformEndian());
 			for (const auto &import : imports)
 			{
@@ -397,8 +396,8 @@ std::string Base::GenerateDebugData() const
 
 void Base::WriteDebugData(binaryio::BinaryWriter &writer) const
 {
-	// Pass a string_view: binaryio's Write(T) overload for types with a value_type would otherwise take the
-	// std::string and write sizeof(std::string) characters instead of the text.
+	// Pass a string_view. Given a std::string, binaryio picks its Write(T) overload for types with a value_type,
+	// which writes sizeof(std::string) characters.
 	const auto debugData = GenerateDebugData();
 	writer.Write(std::string_view(debugData));
 }

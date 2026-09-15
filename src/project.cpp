@@ -57,8 +57,8 @@ namespace
 				index = 2;
 			}
 
-			// std::stoull skips leading whitespace, accepts a sign (wrapping negatives) and stops at
-			// trailing garbage, so insist on plain digits that fit the target type.
+			// std::stoull wraps negative input and ignores trailing garbage, so require plain digits that fit
+			// the target type.
 			const auto digits = scalar.substr(index);
 			if (digits.empty() || !std::isxdigit(static_cast<unsigned char>(digits.front())))
 				return {};
@@ -97,7 +97,7 @@ namespace
 		}
 	}
 
-	// Optional scalars fall back to a default when absent, but a present, malformed value is an error.
+	// An absent optional scalar takes the fallback; a present but malformed one fails.
 	template <typename T>
 	std::optional<T> ParseOptionalUnsignedScalar(const YAML::Node &node, T fallback)
 	{
@@ -109,7 +109,7 @@ namespace
 
 	YAML::Node LoadYamlFile(const std::filesystem::path &path)
 	{
-		// YAML::LoadFile only takes a narrow string, which can't represent every path on Windows.
+		// YAML::LoadFile takes a narrow string, which can't hold non-ANSI paths on Windows.
 		std::ifstream stream(path, std::ios::binary);
 		if (!stream)
 			throw std::runtime_error("Could not open YAML file.");
@@ -570,7 +570,7 @@ bool Bundle::ExportProject(const std::filesystem::path &directory, const Project
 	const auto resources = DescribeResources();
 	if (resources.size() != GetResourceCount())
 	{
-		// Exporting only the readable resources would silently produce an incomplete project.
+		// Exporting only the readable resources would hand the caller an incomplete project with no error.
 		auto code = GetLastErrorCode();
 		return fail(code == ErrorCode::Success ? ErrorCode::DecompressionFailed : code, "Cannot export project: " + GetLastErrorMessage());
 	}
@@ -588,12 +588,12 @@ bool Bundle::ExportProject(const std::filesystem::path &directory, const Project
 			resourceNode["typeName"] = resource.debugData->GetTypeName();
 		}
 
-		// A map even when empty: a resource with no populated blocks would otherwise be written as null.
+		// Start from a map. yaml-cpp writes a default-constructed node as "~", which older libtub versions can't import.
 		YAML::Node binariesNode(YAML::NodeType::Map);
 		const auto resourceFolder = options.sortByType ? std::filesystem::path(TypeFolderName(resource)) : std::filesystem::path();
 		const auto resourceStem = ResourceStem(resource);
 
-		// Fetch (and decompress) the resource once rather than once per memory block.
+		// Fetch and decompress the resource once, then read its blocks from that copy.
 		const auto resourceData = resource.memoryBlocks.empty() ? std::nullopt : GetResource(resource.resourceID, resource.streamIndex);
 		for (const auto &block : resource.memoryBlocks)
 		{

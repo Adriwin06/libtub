@@ -51,7 +51,7 @@ extern "C"
 		LIBTUB_ERROR_UNSUPPORTED_FLAGS = 16,
 		LIBTUB_ERROR_COMPRESSION_FAILED = 17,
 		LIBTUB_ERROR_VALIDATION_FAILED = 18,
-		/* The string was truncated to fit; the buffer still holds a NUL-terminated prefix. */
+		/* The call truncated the string to fit; the buffer holds a NUL-terminated prefix. */
 		LIBTUB_ERROR_INSUFFICIENT_BUFFER = 19,
 
 		LIBTUB_ERROR_MEMORY_ALLOCATION = -1,
@@ -131,7 +131,7 @@ extern "C"
 	LIBTUB_EXPORT libtub_error libtub_resource_debug_data_get_name(const libtub_resource_debug_data *LIBTUB_NONNULL debugData, char *LIBTUB_NONNULL buffer, size_t length);
 	LIBTUB_EXPORT libtub_error libtub_resource_debug_data_get_type_name(const libtub_resource_debug_data *LIBTUB_NONNULL debugData, char *LIBTUB_NONNULL buffer, size_t length);
 
-	/* Check libtub_get_last_error_code afterwards to find out whether the debug data was added. */
+	/* Call libtub_get_last_error_code afterwards to see whether the bundle accepted the debug data. */
 	LIBTUB_EXPORT void libtub_add_resource_debug_data(libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_id resourceID, const libtub_resource_debug_data *LIBTUB_NONNULL debugData, uint8_t streamIndex);
 
 
@@ -201,8 +201,8 @@ extern "C"
 
 	LIBTUB_EXPORT libtub_error libtub_copy_resource(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource *LIBTUB_NULLABLE *LIBTUB_NONNULL resource, libtub_resource_id resourceID, uint8_t streamIndex);
 
-	/* The returned buffer is borrowed from the resource: do not pass it to libtub_buffer_free. It stays
-	   valid until the resource is freed or that memory type is replaced. */
+	/* The resource owns the returned buffer, so don't pass it to libtub_buffer_free. The pointer stays
+	   valid until you free the resource or replace that memory type. */
 	LIBTUB_EXPORT libtub_error libtub_resource_get_binary_mut(libtub_resource *LIBTUB_NONNULL resource, libtub_buffer *LIBTUB_NULLABLE *LIBTUB_NONNULL buffer, libtub_memory_type memoryType);
 	LIBTUB_EXPORT libtub_error libtub_resource_get_binary_const(const libtub_resource *LIBTUB_NONNULL resource, const libtub_buffer *LIBTUB_NULLABLE *LIBTUB_NONNULL buffer, libtub_memory_type memoryType);
 #	define libtub_resource_get_binary(resource, buffer, memoryType) _Generic((resource), \

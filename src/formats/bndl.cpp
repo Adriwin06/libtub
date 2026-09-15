@@ -194,7 +194,7 @@ ErrorCode Bndl::Load(binaryio::BinaryReader &reader)
 			m_imports[resourceID].emplace_back(ReadImport(reader));
 	}
 
-	// An undecodable string table is kept as an ordinary resource so saving still round-trips it.
+	// Keep an undecodable string table as an ordinary resource, so Save writes its bytes back unchanged.
 	const auto rstFile = DecodeBinary({ ResourceID(kResourceStringTableID), static_cast<uint8_t>(0) }, MemoryType::MainMemory);
 	if (!rstFile || *rstFile == nullptr)
 		return ErrorCode::Success;
@@ -319,15 +319,15 @@ ErrorCode Bndl::Save(binaryio::BinaryWriter &writer)
 		e.descriptors[0].data = std::make_unique_for_overwrite<uint8_t[]>(dataSize);
 		std::memcpy(e.descriptors[0].data.get(), data.data(), dataSize);
 
-		// Debug data is only written uncompressed, so the on-disk layout matches the uncompressed one.
+		// Save only writes debug data into uncompressed bundles, so the on-disk size and alignment equal the uncompressed ones.
 		e.descriptors[0].uncompressedSize = static_cast<uint32_t>(dataSize);
 		e.descriptors[0].uncompressedAlignment = 4;
 		e.descriptors[0].onDiskSize = e.descriptors[0].uncompressedSize;
 		e.descriptors[0].onDiskAlignment = e.descriptors[0].uncompressedAlignment;
 	}
 
-	// Every table below must list the entries in the same order, since the loader pairs the ID list with
-	// the ID table by position. The string table goes last regardless of how its ID sorts.
+	// The loader pairs the ID list with the ID table by position, so the tables below share one entry order.
+	// The string table goes last wherever its ID would sort.
 	std::vector<const std::pair<const ResourceKey, ResourceEntry> *> orderedEntries;
 	orderedEntries.reserve(m_entries.size());
 	for (const auto &entry : m_entries)

@@ -26,8 +26,8 @@ if(EXISTS "${LIBTUB_EXTRACTOR_DIR}/CMakeLists.txt")
     string(FIND "${LIBTUB_EXTRACTOR_CMAKE}" "volatility_libtub_extract" LIBTUB_EXTRACTOR_TARGET_INDEX)
     if(LIBTUB_EXTRACTOR_TARGET_INDEX GREATER_EQUAL 0)
         set(LIBTUB_EXTRACTOR_AVAILABLE ON)
-        # Build it by default when the game scan test needs it; multi-config generators otherwise leave it
-        # out of the top-level solution entirely.
+        # Build it by default when the game scan test needs it. Multi-config generators leave EXCLUDE_FROM_ALL
+        # targets out of the top-level solution.
         if(LIBTUB_TEST_GAME_PATHS)
             add_subdirectory(third_party/libbndl-extractor)
         else()

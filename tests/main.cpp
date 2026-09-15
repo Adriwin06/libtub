@@ -715,7 +715,7 @@ namespace
 		Bundle imported;
 		ok &= Expect(imported.ImportProject(directory) && imported.GetResourceCount() == 1, "project empty resource: import failed");
 
-		// Projects exported before the fix wrote such resources as "binaries: ~".
+		// Earlier libtub versions exported such resources as "binaries: ~".
 		{
 			std::ofstream meta(directory / ".meta.yaml", std::ios::binary);
 			meta << "bundle:\n  magic: bnd2\n  version: 5\n  platform: pc\nresources:\n  - id: 0x12345678\n    streamIndex: 0\n    type: 0x00000000\n    binaries: ~\n";

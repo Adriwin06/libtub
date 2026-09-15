@@ -200,7 +200,7 @@ ErrorCode Bnd2::Save(binaryio::BinaryWriter &writer)
 	{
 		writer.Write<uint32_t>(m_version);
 
-		// PCx64 (decomp) is identified on disk by platform 4 (see Load).
+		// The decomp writes PCx64 bundles with platform 4 on disk (see Load).
 		writer.Write<uint32_t>(m_platform == Platform::PCx64 ? 4 : static_cast<uint32_t>(m_platform));
 	}
 
@@ -533,7 +533,7 @@ bool Bnd2::IsValidPlatform() const
 	if (m_version >= 5)
 		return (m_platform == Platform::PSVita || m_platform == Platform::WiiU);
 
-	// The decompilation target is a PC-layout bundle, only seen pre-v5.
+	// Decomp bundles use the PC layout and only exist before v5.
 	return m_platform == Platform::PCx64;
 }
 

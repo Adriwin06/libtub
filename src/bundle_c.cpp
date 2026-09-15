@@ -65,14 +65,14 @@ namespace
 		if (length == 0)
 			return LIBTUB_ERROR_OUT_OF_RANGE;
 
-		// Always leave a usable NUL-terminated prefix, but report truncation instead of hiding it.
+		// Write a NUL-terminated prefix and report LIBTUB_ERROR_INSUFFICIENT_BUFFER when the value didn't fit.
 		const auto copyLength = std::min(value.size(), length - 1);
 		std::memcpy(buffer, value.c_str(), copyLength);
 		buffer[copyLength] = '\0';
 		return (copyLength < value.size()) ? LIBTUB_ERROR_INSUFFICIENT_BUFFER : LIBTUB_ERROR_SUCCESS;
 	}
 
-	// Exceptions must not cross the C boundary.
+	// C++ exceptions must not reach C callers.
 	template <typename Function>
 	libtub_error GuardError(Function &&function) noexcept
 	{
