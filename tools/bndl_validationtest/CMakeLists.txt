@@ -8,6 +8,8 @@ if(MSVC)
     target_compile_options(bndl_validationtest PRIVATE "/W4" "/Zc:throwingNew" "/EHsc")
 endif()
 
+libtub_copy_runtime_dlls(bndl_validationtest)
+
 if(LIBTUB_INSTALL_TOOLS)
     install(TARGETS bndl_validationtest)
 endif()
