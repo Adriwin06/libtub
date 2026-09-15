@@ -10,12 +10,13 @@ namespace libtub
 		public:
 			using Base::Base;
 
-			virtual bool Load(binaryio::BinaryReader &reader) override;
-			virtual bool Save(binaryio::BinaryWriter &writer) override;
+			virtual ErrorCode Load(binaryio::BinaryReader &reader) override;
+			virtual ErrorCode Save(binaryio::BinaryWriter &writer) override;
 
 			[[nodiscard]] virtual constexpr Magic GetMagic() const override { return Magic::Bnd2; }
 
 			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceKey resourceKey) const override;
+			[[nodiscard]] virtual std::optional<Buffer> GetResourceBinary(ResourceKey resourceKey, MemoryType memoryType) const override;
 
 			[[nodiscard]] virtual ResourceID GetDefaultResourceID() const override;
 			[[nodiscard]] virtual int32_t GetDefaultResourceStreamIndex() const override;

@@ -488,6 +488,110 @@ namespace
 		return ExpectBytes(reloaded.GetBinary(resourceID, MemoryType::MainMemory), bytes, label + ": main memory");
 	}
 
+	uint32_t ReadU32(const std::vector<uint8_t> &bytes, size_t offset)
+	{
+		uint32_t value = 0;
+		std::memcpy(&value, bytes.data() + offset, sizeof(value));
+		return value;
+	}
+
+	bool TestCorruptBlockIsReported()
+	{
+		using namespace libtub;
+
+		BundleBuilder builder(BundleProfiles::BurnoutParadisePC());
+		const ResourceID resourceID("corrupt_resource");
+		const std::vector<uint8_t> mainBytes{ 0x10, 0x20, 0x30, 0x40 };
+		const std::vector<uint8_t> disposableBytes{ 0x50, 0x60, 0x70, 0x80, 0x90 };
+		if (!Expect(builder.AddResource(resourceID, ResourceType::Burnout::BinaryFile)
+			.MainMemory(std::span<const uint8_t>(mainBytes), 4)
+			.Disposable(std::span<const uint8_t>(disposableBytes), 4)
+			.Commit(), "corrupt block: failed to add resource"))
+			return false;
+
+		auto bytes = builder.SaveToMemory();
+		if (!Expect(bytes.size() > 64, "corrupt block: failed to serialize"))
+			return false;
+
+		// BND2 v2 PC: file block 1 holds disposable memory. Flip the last byte of its zlib stream (the Adler-32 checksum).
+		const auto idBlockOffset = ReadU32(bytes, 20);
+		const auto disposableBlockOffset = ReadU32(bytes, 28);
+		const auto disposableOnDiskSize = ReadU32(bytes, idBlockOffset + 28 + 4) & 0x0FFFFFFF;
+		bytes[disposableBlockOffset + ReadU32(bytes, idBlockOffset + 40 + 4) + disposableOnDiskSize - 1] ^= 0xFF;
+
+		Bundle bundle;
+		if (!Expect(bundle.Load(std::span<const uint8_t>(bytes)), "corrupt block: load should defer decompression"))
+			return false;
+
+		bool ok = true;
+		ok &= ExpectBytes(bundle.GetBinary(resourceID, MemoryType::MainMemory), mainBytes, "corrupt block: intact main memory should still be readable");
+		ok &= Expect(bundle.GetBinary(resourceID, MemoryType::Disposable) == nullptr, "corrupt block: corrupt disposable memory was returned");
+		ok &= Expect(bundle.GetLastErrorCode() == ErrorCode::DecompressionFailed, "corrupt block: GetBinary error code mismatch");
+		ok &= Expect(!bundle.GetResource(resourceID), "corrupt block: resource with a corrupt block was returned without it");
+		ok &= Expect(bundle.GetLastErrorCode() == ErrorCode::DecompressionFailed, "corrupt block: GetResource error code mismatch");
+		ok &= Expect(!bundle.GetResource(ResourceID("missing_resource")) && bundle.GetLastErrorCode() == ErrorCode::ResourceNotFound, "corrupt block: missing resource error code mismatch");
+		ok &= Expect(bundle.DescribeResources().empty() && bundle.GetLastErrorCode() == ErrorCode::DecompressionFailed, "corrupt block: DescribeResources hid the unreadable resource");
+		ok &= Expect(bundle.SaveToMemory() == bytes, "corrupt block: raw resave was not byte-identical");
+
+#ifndef LIBTUB_SKIP_PROJECT_TESTS
+		const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+		const auto directory = std::filesystem::temp_directory_path() / ("libtub-corrupt-export-" + std::to_string(stamp));
+		ok &= Expect(!bundle.ExportProject(directory), "corrupt block: ExportProject silently dropped the unreadable resource");
+		std::error_code error;
+		std::filesystem::remove_all(directory, error);
+#endif
+		return ok;
+	}
+
+	bool TestFormatFailureCodes()
+	{
+		using namespace libtub;
+
+		bool ok = true;
+		Bundle bundle;
+		const std::vector<uint8_t> unsupportedVersion{ 'b', 'n', 'd', '2', 0x04, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00 };
+		ok &= Expect(!bundle.Load(std::span<const uint8_t>(unsupportedVersion)) && bundle.GetLastErrorCode() == ErrorCode::UnsupportedVersion, "failure codes: BND2 v4 was not reported as an unsupported version");
+
+		// BND2 v2 can't store the multistream flag.
+		Bundle multistream(Magic::Bnd2, 2, Platform::PC, Flags::MultistreamBundle);
+		ok &= Expect(multistream.SaveToMemory().empty() && multistream.GetLastErrorCode() == ErrorCode::UnsupportedFlags, "failure codes: unsupported v2 flags were not reported");
+
+		Bundle wrongPlatform(Magic::Bnd2, 2, Platform::WiiU, Flags());
+		ok &= Expect(wrongPlatform.SaveToMemory().empty() && wrongPlatform.GetLastErrorCode() == ErrorCode::UnsupportedPlatform, "failure codes: unsupported v2 platform was not reported");
+		return ok;
+	}
+
+	bool TestCApiErrorCodes()
+	{
+		bool ok = true;
+
+		libtub_bundle *bundle = nullptr;
+		ok &= Expect(libtub_load(&bundle, "this/path/does/not/exist.bundle") == LIBTUB_ERROR_INVALID_PATH && bundle == nullptr, "C API codes: missing file was not reported as an invalid path");
+		ok &= Expect(libtub_create(&bundle, 0x7F, 5, LIBTUB_PLATFORM_PC, 0) == LIBTUB_ERROR_INVALID_ARGUMENT && bundle == nullptr, "C API codes: invalid magic was not rejected as an argument error");
+
+		if (!Expect(libtub_create(&bundle, LIBTUB_MAGIC_BND2, 2, LIBTUB_PLATFORM_PC, LIBTUB_FLAGS_MULTISTREAM_BUNDLE) == LIBTUB_ERROR_SUCCESS, "C API codes: create failed"))
+			return false;
+
+		const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+		const auto path = (std::filesystem::temp_directory_path() / ("libtub-c-api-" + std::to_string(stamp) + ".bundle")).string();
+		ok &= Expect(libtub_save(bundle, path.c_str()) == LIBTUB_ERROR_UNSUPPORTED_FLAGS, "C API codes: unsupported flags were not reported on save");
+		std::error_code error;
+		std::filesystem::remove(path, error);
+		libtub_free(bundle);
+		bundle = nullptr;
+
+		libtub_resource_debug_data *debugData = nullptr;
+		if (!Expect(libtub_resource_debug_data_create(&debugData, "resource_name", "TypeName") == LIBTUB_ERROR_SUCCESS, "C API codes: debug data create failed"))
+			return false;
+
+		char small[4]{};
+		char full[32]{};
+		ok &= Expect(libtub_resource_debug_data_get_name(debugData, small, sizeof(small)) == LIBTUB_ERROR_INSUFFICIENT_BUFFER && std::strcmp(small, "res") == 0, "C API codes: truncation was not reported");
+		ok &= Expect(libtub_resource_debug_data_get_name(debugData, full, sizeof(full)) == LIBTUB_ERROR_SUCCESS && std::strcmp(full, "resource_name") == 0, "C API codes: full name copy failed");
+		libtub_resource_debug_data_free(debugData);
+		return ok;
+	}
+
 	bool TestFailedLoadKeepsBundle()
 	{
 		using namespace libtub;
@@ -538,6 +642,35 @@ namespace
 	}
 
 #ifndef LIBTUB_SKIP_PROJECT_TESTS
+	bool TestProjectResourceWithoutBlocks()
+	{
+		using namespace libtub;
+
+		const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+		const auto directory = std::filesystem::temp_directory_path() / ("libtub-project-empty-test-" + std::to_string(stamp));
+
+		// A resource with no populated memory blocks must survive export and import.
+		Bundle bundle(Magic::Bnd2, 5, Platform::PC, Flags::HasDebugData);
+		const ResourceID resourceID("empty_resource");
+		bool ok = Expect(bundle.AddResource(resourceID, Resource(ResourceType::NeedForSpeed::BinaryFile)), "project empty resource: failed to add resource");
+		ok &= Expect(bundle.ExportProject(directory), "project empty resource: export failed");
+
+		Bundle imported;
+		ok &= Expect(imported.ImportProject(directory) && imported.GetResourceCount() == 1, "project empty resource: import failed");
+
+		// Projects exported before the fix wrote such resources as "binaries: ~".
+		{
+			std::ofstream meta(directory / ".meta.yaml", std::ios::binary);
+			meta << "bundle:\n  magic: bnd2\n  version: 5\n  platform: pc\nresources:\n  - id: 0x12345678\n    streamIndex: 0\n    type: 0x00000000\n    binaries: ~\n";
+		}
+		Bundle legacy;
+		ok &= Expect(legacy.ImportProject(directory) && legacy.GetResourceCount() == 1, "project empty resource: legacy null binaries were rejected");
+
+		std::error_code error;
+		std::filesystem::remove_all(directory, error);
+		return ok;
+	}
+
 	bool TestProjectRejectsOutOfRangeValues()
 	{
 		const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -567,6 +700,7 @@ int main()
 #ifndef LIBTUB_SKIP_PROJECT_TESTS
 	ok &= TestProjectRoundTrip();
 	ok &= TestProjectRejectsOutOfRangeValues();
+	ok &= TestProjectResourceWithoutBlocks();
 #endif
 	ok &= TestBundleBuilder();
 	ok &= TestBundleBuilderValidation();
@@ -579,5 +713,8 @@ int main()
 	ok &= TestCompressedBnd2RoundTrip(3);
 	ok &= TestCompressedBnd2RoundTrip(5);
 	ok &= TestFailedLoadKeepsBundle();
+	ok &= TestCorruptBlockIsReported();
+	ok &= TestFormatFailureCodes();
+	ok &= TestCApiErrorCodes();
 	return ok ? 0 : 1;
 }

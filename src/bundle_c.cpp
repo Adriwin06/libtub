@@ -3,9 +3,11 @@
 
 #include <libtub/bundle.h>
 #include <algorithm>
-#include <cassert>
 #include <cstring>
+#include <exception>
+#include <memory>
 #include <new>
+#include <string>
 
 using namespace libtub;
 
@@ -18,13 +20,23 @@ namespace
 		case ErrorCode::Success:
 			return LIBTUB_ERROR_SUCCESS;
 		case ErrorCode::InvalidBundle:
-		case ErrorCode::InvalidMagic:
-		case ErrorCode::InvalidPath:
-		case ErrorCode::UnsupportedFormat:
-		case ErrorCode::UnsupportedPlatform:
-		case ErrorCode::UnsupportedVersion:
-		case ErrorCode::UnsupportedFlags:
 			return LIBTUB_ERROR_INVALID_BUNDLE;
+		case ErrorCode::InvalidMagic:
+			return LIBTUB_ERROR_INVALID_MAGIC;
+		case ErrorCode::InvalidPath:
+			return LIBTUB_ERROR_INVALID_PATH;
+		case ErrorCode::IoError:
+			return LIBTUB_ERROR_IO_ERROR;
+		case ErrorCode::InvalidState:
+			return LIBTUB_ERROR_INVALID_STATE;
+		case ErrorCode::UnsupportedFormat:
+			return LIBTUB_ERROR_UNSUPPORTED_FORMAT;
+		case ErrorCode::UnsupportedPlatform:
+			return LIBTUB_ERROR_UNSUPPORTED_PLATFORM;
+		case ErrorCode::UnsupportedVersion:
+			return LIBTUB_ERROR_UNSUPPORTED_VERSION;
+		case ErrorCode::UnsupportedFlags:
+			return LIBTUB_ERROR_UNSUPPORTED_FLAGS;
 		case ErrorCode::ResourceNotFound:
 			return LIBTUB_ERROR_RESOURCE_NOT_FOUND;
 		case ErrorCode::DebugDataNotFound:
@@ -33,8 +45,12 @@ namespace
 			return LIBTUB_ERROR_OUT_OF_RANGE;
 		case ErrorCode::InvalidProject:
 			return LIBTUB_ERROR_INVALID_PROJECT;
+		case ErrorCode::CompressionFailed:
+			return LIBTUB_ERROR_COMPRESSION_FAILED;
 		case ErrorCode::DecompressionFailed:
 			return LIBTUB_ERROR_DECOMPRESSION_FAILED;
+		case ErrorCode::ValidationFailed:
+			return LIBTUB_ERROR_VALIDATION_FAILED;
 		case ErrorCode::MemoryAllocation:
 			return LIBTUB_ERROR_MEMORY_ALLOCATION;
 		case ErrorCode::InvalidArgument:
@@ -52,10 +68,52 @@ namespace
 		if (length == 0)
 			return LIBTUB_ERROR_OUT_OF_RANGE;
 
+		// Always leave a usable NUL-terminated prefix, but report truncation instead of hiding it.
 		const auto copyLength = std::min(value.size(), length - 1);
 		std::memcpy(buffer, value.c_str(), copyLength);
 		buffer[copyLength] = '\0';
-		return LIBTUB_ERROR_SUCCESS;
+		return (copyLength < value.size()) ? LIBTUB_ERROR_INSUFFICIENT_BUFFER : LIBTUB_ERROR_SUCCESS;
+	}
+
+	// Exceptions must not cross the C boundary. binaryio throws heap-allocated exceptions, hence the pointer handler.
+	template <typename Function>
+	libtub_error GuardError(Function &&function) noexcept
+	{
+		try
+		{
+			return function();
+		}
+		catch (const std::bad_alloc &)
+		{
+			return LIBTUB_ERROR_MEMORY_ALLOCATION;
+		}
+		catch (const std::exception *error)
+		{
+			delete error;
+			return LIBTUB_ERROR_GENERIC_FAILURE;
+		}
+		catch (...)
+		{
+			return LIBTUB_ERROR_GENERIC_FAILURE;
+		}
+	}
+
+	template <typename Result, typename Function>
+	Result GuardValue(Result fallback, Function &&function) noexcept
+	{
+		try
+		{
+			return function();
+		}
+		catch (const std::exception *error)
+		{
+			delete error;
+			return fallback;
+		}
+		catch (...)
+		{
+			return fallback;
+		}
 	}
 }
 
@@ -70,19 +128,17 @@ libtub_error libtub_load(libtub_bundle *LIBTUB_NULLABLE *LIBTUB_NONNULL bundle, 
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
 	*bundle = nullptr;
-	*bundle = new (std::nothrow) libtub_bundle;
-	if (*bundle == nullptr)
-		return LIBTUB_ERROR_MEMORY_ALLOCATION;
+	return GuardError([&] {
+		auto loaded = std::make_unique<libtub_bundle>();
+		if (!loaded->Load(std::string(path)))
+		{
+			const auto error = MapErrorCode(loaded->GetLastErrorCode());
+			return (error == LIBTUB_ERROR_SUCCESS) ? LIBTUB_ERROR_INVALID_BUNDLE : error;
+		}
 
-	if (!(*bundle)->Load(std::string(path)))
-	{
-		const auto error = MapErrorCode((*bundle)->GetLastErrorCode());
-		delete *bundle;
-		*bundle = nullptr;
-		return (error == LIBTUB_ERROR_SUCCESS) ? LIBTUB_ERROR_INVALID_BUNDLE : error;
-	}
-
-	return LIBTUB_ERROR_SUCCESS;
+		*bundle = loaded.release();
+		return LIBTUB_ERROR_SUCCESS;
+	});
 }
 
 libtub_error libtub_create(libtub_bundle *LIBTUB_NULLABLE *LIBTUB_NONNULL bundle, libtub_magic magic, uint16_t version, libtub_platform platform, libtub_flags flags)
@@ -92,24 +148,12 @@ libtub_error libtub_create(libtub_bundle *LIBTUB_NULLABLE *LIBTUB_NONNULL bundle
 
 	*bundle = nullptr;
 	if (magic != LIBTUB_MAGIC_BNDL && magic != LIBTUB_MAGIC_BND2)
-		return LIBTUB_ERROR_INVALID_BUNDLE;
+		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
-	try
-	{
-		*bundle = new (std::nothrow) libtub_bundle(static_cast<Magic>(magic), version, static_cast<Platform>(platform), Flags(flags));
-		if (*bundle == nullptr)
-			return LIBTUB_ERROR_MEMORY_ALLOCATION;
-	}
-	catch (const std::bad_alloc &)
-	{
-		return LIBTUB_ERROR_MEMORY_ALLOCATION;
-	}
-	catch (const std::exception &)
-	{
-		return LIBTUB_ERROR_INVALID_BUNDLE;
-	}
-
-	return LIBTUB_ERROR_SUCCESS;
+	return GuardError([&] {
+		*bundle = new libtub_bundle(static_cast<Magic>(magic), version, static_cast<Platform>(platform), Flags(flags));
+		return LIBTUB_ERROR_SUCCESS;
+	});
 }
 
 void libtub_free(libtub_bundle *LIBTUB_NULLABLE bundle)
@@ -122,10 +166,12 @@ libtub_error libtub_save(libtub_bundle *LIBTUB_NONNULL bundle, const char *LIBTU
 	if (bundle == nullptr || path == nullptr)
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
-	if (!bundle->Save(std::string(path)))
-		return MapErrorCode(bundle->GetLastErrorCode());
+	return GuardError([&] {
+		if (!bundle->Save(std::string(path)))
+			return MapErrorCode(bundle->GetLastErrorCode());
 
-	return LIBTUB_ERROR_SUCCESS;
+		return LIBTUB_ERROR_SUCCESS;
+	});
 }
 
 libtub_error libtub_get_last_error_code(const libtub_bundle *LIBTUB_NONNULL bundle)
@@ -199,7 +245,7 @@ libtub_resource_id libtub_resource_id_from_name(const char *LIBTUB_NONNULL name)
 	if (name == nullptr)
 		return 0;
 
-	return static_cast<libtub_resource_id>(ResourceID(name));
+	return GuardValue<libtub_resource_id>(0, [&] { return static_cast<libtub_resource_id>(ResourceID(std::string(name))); });
 }
 
 libtub_resource_id libtub_resource_id_from_game_changer(uint32_t id, uint16_t resourceType, uint8_t index)
@@ -246,15 +292,14 @@ libtub_error libtub_get_resource_debug_data(const libtub_bundle *LIBTUB_NONNULL 
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
 	*debugData = nullptr;
-	auto internalDebugData = bundle->GetResourceDebugData(ResourceID(resourceID), streamIndex);
-	if (!internalDebugData)
-		return MapErrorCode(bundle->GetLastErrorCode());
+	return GuardError([&] {
+		auto internalDebugData = bundle->GetResourceDebugData(ResourceID(resourceID), streamIndex);
+		if (!internalDebugData)
+			return MapErrorCode(bundle->GetLastErrorCode());
 
-	*debugData = new (std::nothrow) libtub_resource_debug_data(*std::move(internalDebugData));
-	if (*debugData == nullptr)
-		return LIBTUB_ERROR_MEMORY_ALLOCATION;
-
-	return LIBTUB_ERROR_SUCCESS;
+		*debugData = new libtub_resource_debug_data(*std::move(internalDebugData));
+		return LIBTUB_ERROR_SUCCESS;
+	});
 }
 
 libtub_error libtub_resource_debug_data_create(libtub_resource_debug_data *LIBTUB_NULLABLE *LIBTUB_NONNULL debugData, const char *LIBTUB_NONNULL name, const char *LIBTUB_NONNULL typeName)
@@ -263,11 +308,10 @@ libtub_error libtub_resource_debug_data_create(libtub_resource_debug_data *LIBTU
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
 	*debugData = nullptr;
-	*debugData = new (std::nothrow) libtub_resource_debug_data(name, typeName);
-	if (*debugData == nullptr)
-		return LIBTUB_ERROR_MEMORY_ALLOCATION;
-
-	return LIBTUB_ERROR_SUCCESS;
+	return GuardError([&] {
+		*debugData = new libtub_resource_debug_data(name, typeName);
+		return LIBTUB_ERROR_SUCCESS;
+	});
 }
 
 void libtub_resource_debug_data_free(libtub_resource_debug_data *LIBTUB_NULLABLE debugData)
@@ -296,7 +340,7 @@ void libtub_add_resource_debug_data(libtub_bundle *LIBTUB_NONNULL bundle, libtub
 	if (bundle == nullptr || debugData == nullptr)
 		return;
 
-	bundle->AddResourceDebugData(ResourceID(resourceID), *debugData, streamIndex);
+	GuardValue(false, [&] { return bundle->AddResourceDebugData(ResourceID(resourceID), *debugData, streamIndex); });
 }
 
 
@@ -306,13 +350,14 @@ libtub_error libtub_get_resource_type(const libtub_bundle *LIBTUB_NONNULL bundle
 	if (bundle == nullptr || resourceType == nullptr)
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
-	const auto internalResourceType = bundle->GetResourceType(ResourceID(resourceID), streamIndex);
-	if (!internalResourceType)
-		return MapErrorCode(bundle->GetLastErrorCode());
+	return GuardError([&] {
+		const auto internalResourceType = bundle->GetResourceType(ResourceID(resourceID), streamIndex);
+		if (!internalResourceType)
+			return MapErrorCode(bundle->GetLastErrorCode());
 
-	*resourceType = *internalResourceType;
-
-	return LIBTUB_ERROR_SUCCESS;
+		*resourceType = *internalResourceType;
+		return LIBTUB_ERROR_SUCCESS;
+	});
 }
 
 
@@ -359,18 +404,17 @@ libtub_error libtub_copy_binary(const libtub_bundle *LIBTUB_NONNULL bundle, libt
 	if (memoryType >= 4)
 		return LIBTUB_ERROR_OUT_OF_RANGE;
 
-	auto binary = bundle->GetBinary(ResourceID(resourceID), static_cast<MemoryType>(memoryType), streamIndex);
-	if (binary == nullptr)
-	{
-		const auto error = MapErrorCode(bundle->GetLastErrorCode());
-		return (error == LIBTUB_ERROR_SUCCESS) ? LIBTUB_ERROR_RESOURCE_NOT_FOUND : error;
-	}
+	return GuardError([&] {
+		auto binary = bundle->GetBinary(ResourceID(resourceID), static_cast<MemoryType>(memoryType), streamIndex);
+		if (binary == nullptr)
+		{
+			const auto error = MapErrorCode(bundle->GetLastErrorCode());
+			return (error == LIBTUB_ERROR_SUCCESS) ? LIBTUB_ERROR_RESOURCE_NOT_FOUND : error;
+		}
 
-	*buffer = new (std::nothrow) libtub_buffer(std::move(binary));
-	if (*buffer == nullptr)
-		return LIBTUB_ERROR_MEMORY_ALLOCATION;
-
-	return LIBTUB_ERROR_SUCCESS;
+		*buffer = new libtub_buffer(std::move(binary));
+		return LIBTUB_ERROR_SUCCESS;
+	});
 }
 
 void *libtub_buffer_get_data(const libtub_buffer *LIBTUB_NONNULL buffer)
@@ -482,15 +526,14 @@ libtub_error libtub_copy_resource(const libtub_bundle *LIBTUB_NONNULL bundle, li
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
 	*resource = nullptr;
-	auto internalResource = bundle->GetResource(ResourceID(resourceID), streamIndex);
-	if (!internalResource)
-		return MapErrorCode(bundle->GetLastErrorCode());
+	return GuardError([&] {
+		auto internalResource = bundle->GetResource(ResourceID(resourceID), streamIndex);
+		if (!internalResource)
+			return MapErrorCode(bundle->GetLastErrorCode());
 
-	*resource = new (std::nothrow) libtub_resource(*std::move(internalResource));
-	if (*resource == nullptr)
-		return LIBTUB_ERROR_MEMORY_ALLOCATION;
-
-	return LIBTUB_ERROR_SUCCESS;
+		*resource = new libtub_resource(*std::move(internalResource));
+		return LIBTUB_ERROR_SUCCESS;
+	});
 }
 
 libtub_error libtub_resource_get_binary_mut(libtub_resource *LIBTUB_NONNULL resource, libtub_buffer *LIBTUB_NULLABLE *LIBTUB_NONNULL buffer, libtub_memory_type memoryType)
@@ -533,11 +576,11 @@ libtub_error libtub_resource_copy_import(const libtub_resource *LIBTUB_NONNULL r
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
 	*import = nullptr;
-	auto imports = resource->GetImports();
+	const auto &imports = resource->GetImports();
 	if (index >= imports.size())
 		return LIBTUB_ERROR_OUT_OF_RANGE;
 
-	*import = new (std::nothrow) libtub_import(std::move(imports[index]));
+	*import = new (std::nothrow) libtub_import(Import(imports[index]));
 	if (*import == nullptr)
 		return LIBTUB_ERROR_MEMORY_ALLOCATION;
 
@@ -572,7 +615,10 @@ void libtub_resource_add_import(libtub_resource *LIBTUB_NONNULL resource, libtub
 	if (resource == nullptr || import == nullptr)
 		return;
 
-	resource->AddImport(*import);
+	GuardValue(false, [&] {
+		resource->AddImport(*import);
+		return true;
+	});
 }
 
 libtub_error libtub_add_resource(libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_id resourceID, const libtub_resource *LIBTUB_NONNULL resource, uint8_t streamIndex)
@@ -580,10 +626,12 @@ libtub_error libtub_add_resource(libtub_bundle *LIBTUB_NONNULL bundle, libtub_re
 	if (bundle == nullptr || resource == nullptr)
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
-	if (!bundle->AddResource(ResourceID(resourceID), *resource, streamIndex))
-		return MapErrorCode(bundle->GetLastErrorCode());
+	return GuardError([&] {
+		if (!bundle->AddResource(ResourceID(resourceID), *resource, streamIndex))
+			return MapErrorCode(bundle->GetLastErrorCode());
 
-	return LIBTUB_ERROR_SUCCESS;
+		return LIBTUB_ERROR_SUCCESS;
+	});
 }
 
 libtub_error libtub_replace_resource(libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_id resourceID, const libtub_resource *LIBTUB_NONNULL resource, uint8_t streamIndex)
@@ -591,10 +639,12 @@ libtub_error libtub_replace_resource(libtub_bundle *LIBTUB_NONNULL bundle, libtu
 	if (bundle == nullptr || resource == nullptr)
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
-	if (!bundle->ReplaceResource(ResourceID(resourceID), *resource, streamIndex))
-		return MapErrorCode(bundle->GetLastErrorCode());
+	return GuardError([&] {
+		if (!bundle->ReplaceResource(ResourceID(resourceID), *resource, streamIndex))
+			return MapErrorCode(bundle->GetLastErrorCode());
 
-	return LIBTUB_ERROR_SUCCESS;
+		return LIBTUB_ERROR_SUCCESS;
+	});
 }
 
 
@@ -612,12 +662,14 @@ libtub_error libtub_get_resource_id_at_index(const libtub_bundle *LIBTUB_NONNULL
 	if (bundle == nullptr || resourceID == nullptr)
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
-	const auto resourceIDs = bundle->GetResourceIDs();
-	if (index >= resourceIDs.size())
-		return LIBTUB_ERROR_OUT_OF_RANGE;
+	return GuardError([&] {
+		const auto resourceIDs = bundle->GetResourceIDs();
+		if (index >= resourceIDs.size())
+			return LIBTUB_ERROR_OUT_OF_RANGE;
 
-	*resourceID = static_cast<libtub_resource_id>(resourceIDs[index]);
-	return LIBTUB_ERROR_SUCCESS;
+		*resourceID = static_cast<libtub_resource_id>(resourceIDs[index]);
+		return LIBTUB_ERROR_SUCCESS;
+	});
 }
 
 bool libtub_is_populated_resource_stream_index(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_id resourceID, uint8_t streamIndex)
@@ -625,8 +677,10 @@ bool libtub_is_populated_resource_stream_index(const libtub_bundle *LIBTUB_NONNU
 	if (bundle == nullptr)
 		return false;
 
-	const auto indices = bundle->GetResourceStreamIndices(ResourceID(resourceID));
-	return std::find(indices.begin(), indices.end(), streamIndex) != indices.end();
+	return GuardValue(false, [&] {
+		const auto indices = bundle->GetResourceStreamIndices(ResourceID(resourceID));
+		return std::find(indices.begin(), indices.end(), streamIndex) != indices.end();
+	});
 }
 
 libtub_resource_id libtub_get_default_resource_id(const libtub_bundle *LIBTUB_NONNULL bundle)
@@ -650,7 +704,7 @@ libtub_error libtub_get_stream_name(const libtub_bundle *LIBTUB_NONNULL bundle, 
 	if (bundle == nullptr)
 		return LIBTUB_ERROR_INVALID_ARGUMENT;
 
-	return CopyStringToBuffer(bundle->GetStreamName(streamIndex), buffer, length);
+	return GuardError([&] { return CopyStringToBuffer(bundle->GetStreamName(streamIndex), buffer, length); });
 }
 
 bool libtub_is_valid_memory_type(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_memory_type memoryType)
@@ -658,6 +712,8 @@ bool libtub_is_valid_memory_type(const libtub_bundle *LIBTUB_NONNULL bundle, lib
 	if (bundle == nullptr)
 		return false;
 
-	const auto memoryTypes = bundle->GetMemoryTypes();
-	return std::find(memoryTypes.begin(), memoryTypes.end(), static_cast<MemoryType>(memoryType)) != memoryTypes.end();
+	return GuardValue(false, [&] {
+		const auto memoryTypes = bundle->GetMemoryTypes();
+		return std::find(memoryTypes.begin(), memoryTypes.end(), static_cast<MemoryType>(memoryType)) != memoryTypes.end();
+	});
 }

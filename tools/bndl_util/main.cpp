@@ -258,7 +258,13 @@ int main(int argc, char** argv)
 					{
 						const auto debugData = arch.GetResourceDebugData(resourceID, streamIndex);
 						const auto resourceType = *arch.GetResourceType(resourceID, streamIndex);
-						const auto data = *arch.GetResource(resourceID, streamIndex);
+						const auto resource = arch.GetResource(resourceID, streamIndex);
+						if (!resource)
+						{
+							std::cout << "Skipping " << idStr << ": " << arch.GetLastErrorMessage() << std::endl;
+							continue;
+						}
+						const auto &data = *resource;
 
 						auto name = getDebugName(arch, debugData, idStr);
 						if (streamIndex > 0)

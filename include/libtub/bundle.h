@@ -41,6 +41,18 @@ extern "C"
 		LIBTUB_ERROR_INVALID_PROJECT = 6,
 		LIBTUB_ERROR_DECOMPRESSION_FAILED = 7,
 		LIBTUB_ERROR_INVALID_ARGUMENT = 8,
+		LIBTUB_ERROR_INVALID_MAGIC = 9,
+		LIBTUB_ERROR_INVALID_PATH = 10,
+		LIBTUB_ERROR_IO_ERROR = 11,
+		LIBTUB_ERROR_INVALID_STATE = 12,
+		LIBTUB_ERROR_UNSUPPORTED_FORMAT = 13,
+		LIBTUB_ERROR_UNSUPPORTED_PLATFORM = 14,
+		LIBTUB_ERROR_UNSUPPORTED_VERSION = 15,
+		LIBTUB_ERROR_UNSUPPORTED_FLAGS = 16,
+		LIBTUB_ERROR_COMPRESSION_FAILED = 17,
+		LIBTUB_ERROR_VALIDATION_FAILED = 18,
+		/* The string was truncated to fit; the buffer still holds a NUL-terminated prefix. */
+		LIBTUB_ERROR_INSUFFICIENT_BUFFER = 19,
 
 		LIBTUB_ERROR_MEMORY_ALLOCATION = -1,
 	} libtub_error;
@@ -119,6 +131,7 @@ extern "C"
 	LIBTUB_EXPORT libtub_error libtub_resource_debug_data_get_name(const libtub_resource_debug_data *LIBTUB_NONNULL debugData, char *LIBTUB_NONNULL buffer, size_t length);
 	LIBTUB_EXPORT libtub_error libtub_resource_debug_data_get_type_name(const libtub_resource_debug_data *LIBTUB_NONNULL debugData, char *LIBTUB_NONNULL buffer, size_t length);
 
+	/* Check libtub_get_last_error_code afterwards to find out whether the debug data was added. */
 	LIBTUB_EXPORT void libtub_add_resource_debug_data(libtub_bundle *LIBTUB_NONNULL bundle, libtub_resource_id resourceID, const libtub_resource_debug_data *LIBTUB_NONNULL debugData, uint8_t streamIndex);
 
 
@@ -218,6 +231,7 @@ extern "C"
 	LIBTUB_EXPORT int32_t libtub_get_default_resource_stream_index(const libtub_bundle *LIBTUB_NONNULL bundle);
 
 #	define LIBTUB_STREAM_NAME_MAX_LENGTH 15
+#	define LIBTUB_STREAM_NAME_BUFFER_SIZE (LIBTUB_STREAM_NAME_MAX_LENGTH + 1)
 	LIBTUB_EXPORT libtub_error libtub_get_stream_name(const libtub_bundle *LIBTUB_NONNULL bundle, char *LIBTUB_NONNULL buffer, size_t length, uint8_t streamIndex);
 
 	LIBTUB_EXPORT bool libtub_is_valid_memory_type(const libtub_bundle *LIBTUB_NONNULL bundle, libtub_memory_type memoryType);

@@ -4,11 +4,10 @@
 #include <binaryio/binaryreader.hpp>
 #include <binaryio/binarywriter.hpp>
 #include <algorithm>
-#include <cstring>
+#include <array>
 #include <fstream>
 #include <limits>
 #include <locale>
-#include <set>
 #include <stdexcept>
 #include <tuple>
 #include <zlib.h>
@@ -26,14 +25,41 @@ namespace
 		return {};
 	}
 
+	std::string DescribeFormatFailure(ErrorCode code, bool saving)
+	{
+		switch (code)
+		{
+		case ErrorCode::UnsupportedVersion:
+			return "Bundle version is not supported by this format.";
+		case ErrorCode::UnsupportedPlatform:
+			return "Bundle platform is not supported by this format version.";
+		case ErrorCode::UnsupportedFlags:
+			return "Bundle flags are not supported by this format version.";
+		default:
+			return saving ? "Bundle failed format validation while saving." : "Bundle parser rejected the input.";
+		}
+	}
+
+	// Tells a missing resource apart from one whose stored data can't be decoded.
+	std::pair<ErrorCode, std::string> DescribeResourceReadFailure(const Formats::Base &impl, Formats::ResourceKey resourceKey)
+	{
+		if (!impl.HasResource(resourceKey))
+			return { ErrorCode::ResourceNotFound, "Resource was not found." };
+
+		return { ErrorCode::DecompressionFailed, "Resource data could not be decoded; the bundle may be corrupt." };
+	}
+
 	// Returns an empty message on success. binaryio reports overflow by throwing heap-allocated exceptions.
 	std::string SaveImplementation(Formats::Base &impl, binaryio::BinaryWriter &writer, ErrorCode &code)
 	{
 		code = ErrorCode::ValidationFailed;
 		try
 		{
-			if (!impl.Save(writer))
-				return "Bundle failed format validation while saving.";
+			if (const auto result = impl.Save(writer); result != ErrorCode::Success)
+			{
+				code = result;
+				return DescribeFormatFailure(result, true);
+			}
 		}
 		catch (const std::exception &)
 		{
@@ -60,9 +86,19 @@ namespace
 
 ResourceID::ResourceID(const std::string &name) noexcept
 {
-	std::string transformedName = name;
-	std::transform(transformedName.begin(), transformedName.end(), transformedName.begin(), [](auto c) { return std::tolower(c, std::locale::classic()); });
-	m_id = crc32_z(0, reinterpret_cast<const Bytef *>(transformedName.c_str()), transformedName.length());
+	// Hash the lower-cased name in fixed-size chunks rather than copying it, so this can't throw.
+	std::array<Bytef, 256> chunk;
+	uLong crc = 0;
+	for (size_t offset = 0; offset < name.size();)
+	{
+		const auto count = std::min(chunk.size(), name.size() - offset);
+		for (size_t i = 0; i < count; ++i)
+			chunk[i] = static_cast<Bytef>(std::tolower(name[offset + i], std::locale::classic()));
+
+		crc = crc32_z(crc, chunk.data(), count);
+		offset += count;
+	}
+	m_id = crc;
 }
 
 
@@ -167,8 +203,8 @@ bool Bundle::Load(std::span<const uint8_t> data)
 
 	try
 	{
-		if (!impl->Load(reader))
-			return Fail(ErrorCode::InvalidBundle, "Bundle parser rejected the input.");
+		if (const auto result = impl->Load(reader); result != ErrorCode::Success)
+			return Fail(result, DescribeFormatFailure(result, false));
 	}
 	catch (const std::exception &)
 	{
@@ -300,10 +336,12 @@ std::optional<Resource> Bundle::GetResource(ResourceID resourceID, uint8_t strea
 		return {};
 	}
 
-	auto resource = m_impl->GetResource({ resourceID, streamIndex });
+	const Formats::ResourceKey resourceKey{ resourceID, streamIndex };
+	auto resource = m_impl->GetResource(resourceKey);
 	if (!resource)
 	{
-		SetLastError(ErrorCode::ResourceNotFound, "Resource was not found.");
+		auto [code, message] = DescribeResourceReadFailure(*m_impl, resourceKey);
+		SetLastError(code, std::move(message));
 		return {};
 	}
 
@@ -326,26 +364,24 @@ Buffer Bundle::GetBinary(ResourceID resourceID, MemoryType memoryType, uint8_t s
 		return {};
 	}
 
-	const auto resource = m_impl->GetResource({ resourceID, streamIndex });
-	if (!resource)
+	// Decode only the requested block rather than the whole resource.
+	const Formats::ResourceKey resourceKey{ resourceID, streamIndex };
+	auto buffer = m_impl->GetResourceBinary(resourceKey, memoryType);
+	if (!buffer)
 	{
-		SetLastError(ErrorCode::ResourceNotFound, "Resource was not found.");
+		auto [code, message] = DescribeResourceReadFailure(*m_impl, resourceKey);
+		SetLastError(code, std::move(message));
 		return {};
 	}
 
-	const auto &buffer = resource->GetBinary(memoryType);
-	if (buffer == nullptr)
+	if (*buffer == nullptr)
 	{
 		SetLastError(ErrorCode::ResourceNotFound, "Resource does not contain the requested memory block.");
 		return {};
 	}
 
-	auto copy = std::make_unique_for_overwrite<uint8_t[]>(buffer.GetSize());
-	if (buffer.GetSize() > 0)
-		std::memcpy(copy.get(), buffer.GetData(), buffer.GetSize());
-
 	ClearLastError();
-	return { std::move(copy), buffer.GetSize(), buffer.GetAlignment() };
+	return std::move(*buffer);
 }
 
 std::optional<ResourceDebugData> Bundle::GetResourceDebugData(ResourceID resourceID, uint8_t streamIndex) const
@@ -521,42 +557,51 @@ std::vector<ResourceDescriptor> Bundle::DescribeResources() const
 		return {};
 	}
 
-	std::set<ResourceID> uniqueIDs;
-	for (const auto &resourceID : GetResourceIDs())
-		uniqueIDs.insert(resourceID);
+	const auto memoryTypes = m_impl->GetMemoryTypes();
+	const auto resourceKeys = m_impl->GetResourceKeys();
 
 	std::vector<ResourceDescriptor> resources;
-	for (const auto &resourceID : uniqueIDs)
+	resources.reserve(resourceKeys.size());
+	size_t unreadableResources = 0;
+	for (const auto &resourceKey : resourceKeys)
 	{
-		for (const auto streamIndex : GetResourceStreamIndices(resourceID))
+		const auto resource = m_impl->GetResource(resourceKey);
+		if (!resource)
 		{
-			const auto resource = GetResource(resourceID, streamIndex);
-			if (!resource)
+			++unreadableResources;
+			continue;
+		}
+
+		ResourceDescriptor descriptor;
+		descriptor.resourceID = resourceKey.first;
+		descriptor.streamIndex = resourceKey.second;
+		descriptor.resourceType = resource->GetResourceType();
+		if (const auto debugData = m_impl->GetResourceDebugData(resourceKey))
+			descriptor.debugData = ResourceDebugData{ debugData->name, debugData->typeName };
+		descriptor.imports = resource->GetImports();
+
+		for (const auto &memoryType : memoryTypes)
+		{
+			const auto &buffer = resource->GetBinary(memoryType);
+			if (buffer == nullptr)
 				continue;
 
-			ResourceDescriptor descriptor;
-			descriptor.resourceID = resourceID;
-			descriptor.streamIndex = streamIndex;
-			descriptor.resourceType = resource->GetResourceType();
-			descriptor.debugData = GetResourceDebugData(resourceID, streamIndex);
-			descriptor.imports = resource->GetImports();
-
-			for (const auto &memoryType : GetMemoryTypes())
-			{
-				const auto &buffer = resource->GetBinary(memoryType);
-				if (buffer == nullptr)
-					continue;
-
-				descriptor.memoryBlocks.push_back({ memoryType, buffer.GetSize(), buffer.GetAlignment() });
-			}
-
-			resources.emplace_back(std::move(descriptor));
+			descriptor.memoryBlocks.push_back({ memoryType, buffer.GetSize(), buffer.GetAlignment() });
 		}
+
+		resources.emplace_back(std::move(descriptor));
 	}
 
 	std::sort(resources.begin(), resources.end(), [](const auto &lhs, const auto &rhs) {
 		return std::tie(lhs.resourceType, lhs.resourceID, lhs.streamIndex) < std::tie(rhs.resourceType, rhs.resourceID, rhs.streamIndex);
 	});
+
+	// Still describe what can be read, but don't let corrupt resources disappear silently.
+	if (unreadableResources > 0)
+	{
+		SetLastError(ErrorCode::DecompressionFailed, std::to_string(unreadableResources) + " resource(s) could not be decoded and were left out; the bundle may be corrupt.");
+		return resources;
+	}
 
 	ClearLastError();
 	return resources;

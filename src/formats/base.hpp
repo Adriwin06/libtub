@@ -85,8 +85,8 @@ namespace libtub
 			Base(uint16_t version, Platform platform, Flags flags);
 			virtual ~Base() = default;
 
-			virtual bool Load(binaryio::BinaryReader &reader) = 0;
-			virtual bool Save(binaryio::BinaryWriter &writer) = 0;
+			virtual ErrorCode Load(binaryio::BinaryReader &reader) = 0;
+			virtual ErrorCode Save(binaryio::BinaryWriter &writer) = 0;
 
 			[[nodiscard]] virtual constexpr Magic GetMagic() const = 0;
 			[[nodiscard]] constexpr uint16_t GetVersion() const { return m_version; }
@@ -95,8 +95,12 @@ namespace libtub
 
 			[[nodiscard]] std::optional<ResourceDebugDataEntry> GetResourceDebugData(ResourceKey resourceKey) const;
 			[[nodiscard]] std::optional<uint32_t> GetResourceType(ResourceKey resourceKey) const;
+			// Returns nothing when the resource is missing or one of its populated blocks can't be decoded.
 			[[nodiscard]] virtual std::optional<Resource> GetResource(ResourceKey resourceKey) const = 0;
-			[[nodiscard]] Buffer GetBinary(ResourceKey resourceKey, MemoryType memoryType) const;
+			// Decodes a single block as GetResource would return it: an empty buffer when the block has no data,
+			// nothing when the resource is missing or the block can't be decoded.
+			[[nodiscard]] virtual std::optional<Buffer> GetResourceBinary(ResourceKey resourceKey, MemoryType memoryType) const;
+			[[nodiscard]] bool HasResource(ResourceKey resourceKey) const { return m_entries.contains(resourceKey); }
 
 			bool AddResource(ResourceKey resourceKey, const Resource &data);
 			bool AddResourceDebugData(ResourceKey resourceID, const std::string &name, const std::string &type);
@@ -105,6 +109,7 @@ namespace libtub
 
 			[[nodiscard]] uint32_t GetResourceCount() const { return static_cast<uint32_t>(m_entries.size()); }
 			[[nodiscard]] std::vector<ResourceID> GetResourceIDs() const;
+			[[nodiscard]] std::vector<ResourceKey> GetResourceKeys() const;
 			[[nodiscard]] std::map<uint32_t, std::vector<ResourceID>> GetResourceIDsByType() const;
 			[[nodiscard]] std::vector<uint8_t> GetResourceStreamIndices(ResourceID resourceID) const;
 
@@ -118,6 +123,8 @@ namespace libtub
 
 		protected:
 			static constexpr const uint8_t kStreamLimit = 4;
+			// A serialised import: 64-bit resource ID, 32-bit offset/kind, padded to 8 bytes.
+			static constexpr const size_t kImportEntrySize = 16;
 
 			std::map<ResourceKey, ResourceEntry> m_entries;
 			std::map<ResourceKey, ResourceDebugDataEntry> m_debugDataEntries;
@@ -132,6 +139,10 @@ namespace libtub
 			virtual bool IsValidPlatform() const;
 
 			std::endian GetPlatformEndian() const;
+
+			// Decompresses (or copies) one stored block. Unlike an empty buffer, nothing means the block holds
+			// data that could not be decoded.
+			[[nodiscard]] std::optional<Buffer> DecodeBinary(ResourceKey resourceKey, MemoryType memoryType) const;
 
 			void ParseDebugData(const std::string &rstXML);
 			[[nodiscard]] std::string GenerateDebugData() const;

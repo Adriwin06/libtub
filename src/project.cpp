@@ -567,7 +567,15 @@ bool Bundle::ExportProject(const std::filesystem::path &directory, const Project
 	YAML::Node combinedImportsRoot;
 	combinedImportsRoot["resources"] = YAML::Node(YAML::NodeType::Sequence);
 
-	for (const auto &resource : DescribeResources())
+	const auto resources = DescribeResources();
+	if (resources.size() != GetResourceCount())
+	{
+		// Exporting only the readable resources would silently produce an incomplete project.
+		auto code = GetLastErrorCode();
+		return fail(code == ErrorCode::Success ? ErrorCode::DecompressionFailed : code, "Cannot export project: " + GetLastErrorMessage());
+	}
+
+	for (const auto &resource : resources)
 	{
 		YAML::Node resourceNode;
 		resourceNode["id"] = FormatResourceID(resource.resourceID);
@@ -580,7 +588,8 @@ bool Bundle::ExportProject(const std::filesystem::path &directory, const Project
 			resourceNode["typeName"] = resource.debugData->GetTypeName();
 		}
 
-		YAML::Node binariesNode;
+		// A map even when empty: a resource with no populated blocks would otherwise be written as null.
+		YAML::Node binariesNode(YAML::NodeType::Map);
 		const auto resourceFolder = options.sortByType ? std::filesystem::path(TypeFolderName(resource)) : std::filesystem::path();
 		const auto resourceStem = ResourceStem(resource);
 
@@ -700,7 +709,8 @@ bool Bundle::ImportProject(const std::filesystem::path &directory)
 
 			Resource resource(*resourceType);
 			const auto binariesNode = resourceNode["binaries"];
-			if (!binariesNode || !binariesNode.IsMap())
+			// Older exports wrote resources without populated blocks as "binaries: ~", so accept null as empty.
+			if (!binariesNode || !(binariesNode.IsMap() || binariesNode.IsNull()))
 				return fail("Project resource is missing binary metadata.");
 
 			for (const auto &memoryType : imported.GetMemoryTypes())

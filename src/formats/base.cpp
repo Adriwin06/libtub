@@ -35,7 +35,7 @@ std::optional<uint32_t> Base::GetResourceType(ResourceKey resourceKey) const
 	return it->second.resourceType;
 }
 
-Buffer Base::GetBinary(ResourceKey resourceKey, MemoryType memoryType) const
+std::optional<Buffer> Base::DecodeBinary(ResourceKey resourceKey, MemoryType memoryType) const
 {
 	const auto it = m_entries.find(resourceKey);
 	if (it == m_entries.end())
@@ -46,7 +46,7 @@ Buffer Base::GetBinary(ResourceKey resourceKey, MemoryType memoryType) const
 	const auto &dataInfo = e.descriptors[LIBTUB_TO_UNDERLYING(memoryType)];
 
 	if (dataInfo.data == nullptr)
-		return {};
+		return Buffer{};
 
 	const auto &buffer = dataInfo.data;
 	const auto uncompressedSize = dataInfo.uncompressedSize;
@@ -69,7 +69,12 @@ Buffer Base::GetBinary(ResourceKey resourceKey, MemoryType memoryType) const
 		std::memcpy(uncompressedBuffer.get(), buffer.get(), uncompressedSize);
 	}
 
-	return { std::move(uncompressedBuffer), uncompressedSize, dataInfo.uncompressedAlignment };
+	return Buffer{ std::move(uncompressedBuffer), uncompressedSize, dataInfo.uncompressedAlignment };
+}
+
+std::optional<Buffer> Base::GetResourceBinary(ResourceKey resourceKey, MemoryType memoryType) const
+{
+	return DecodeBinary(resourceKey, memoryType);
 }
 
 bool Base::AddResource(ResourceKey resourceKey, const Resource &resource)
@@ -229,6 +234,12 @@ std::vector<ResourceID> Base::GetResourceIDs() const
 		entries.push_back(e.first.first);
 	}
 	return entries;
+}
+
+std::vector<ResourceKey> Base::GetResourceKeys() const
+{
+	const auto keys = std::views::keys(m_entries);
+	return std::vector<ResourceKey>{ keys.begin(), keys.end() };
 }
 
 std::map<uint32_t, std::vector<ResourceID>> Base::GetResourceIDsByType() const
