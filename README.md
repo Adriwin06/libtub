@@ -127,9 +127,9 @@ int main()
 
 ## Public API highlights
 
-- `bool Load(const std::string &path)`
+- `bool Load(const std::filesystem::path &path)`
 - `bool Load(std::span<const uint8_t> data)`
-- `bool Save(const std::string &path)`
+- `bool Save(const std::filesystem::path &path)`
 - `std::vector<uint8_t> SaveToMemory()`
 - `ErrorCode GetLastErrorCode() const`
 - `const std::string &GetLastErrorMessage() const`
@@ -142,4 +142,4 @@ int main()
 ## Notes
 
 - `ref/` is kept as reference material only. `libtub`'s actual source lives in the repo root `include/`, `src/`, and `tools/`.
-- The bundle editor/utility tool sources are still present behind CMake options, but the core deliverable here is the reusable C++ library.
+- The `bndl_util` and `bndl_validationtest` tools are built behind CMake options, but the core deliverable here is the reusable C++ library.
