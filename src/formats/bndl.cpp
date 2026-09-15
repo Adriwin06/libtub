@@ -306,7 +306,8 @@ bool Bndl::Save(binaryio::BinaryWriter &writer)
 
 		auto debugDataWriter = binaryio::BinaryWriter();
 		debugDataWriter.Write(static_cast<uint32_t>(outStr.size()));
-		debugDataWriter.Write(outStr);
+		// A std::string argument would pick binaryio's element-wise Write(T) overload instead.
+		debugDataWriter.Write(std::string_view(outStr));
 
 		const auto stream = debugDataWriter.GetStream();
 		const auto data = stream.view();

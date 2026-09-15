@@ -225,7 +225,7 @@ bool Bnd2::Save(binaryio::BinaryWriter &writer)
 		writer.VisitAndWrite<uint32_t>(rstPointerPos, writer.GetOffset32());
 		if (m_flags & Flags::HasDebugData)
 		{
-			writer.Write(GenerateDebugData());
+			WriteDebugData(writer);
 			writer.Align(16);
 		}
 	}
@@ -360,7 +360,7 @@ bool Bnd2::Save(binaryio::BinaryWriter &writer)
 	{
 		writer.VisitAndWrite<uint32_t>(rstPointerPos, writer.GetOffset32());
 		if (m_flags & Flags::HasDebugData)
-			writer.Write(GenerateDebugData());
+			WriteDebugData(writer);
 		writer.Align(lastAlignment);
 	}
 

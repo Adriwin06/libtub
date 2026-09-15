@@ -359,6 +359,14 @@ std::string Base::GenerateDebugData() const
 	return std::regex_replace(out.str(), std::regex(" />\n"), "/>\n");
 }
 
+void Base::WriteDebugData(binaryio::BinaryWriter &writer) const
+{
+	// Pass a string_view. Given a std::string, binaryio picks its Write(T) overload for types with a value_type,
+	// which writes sizeof(std::string) characters.
+	const auto debugData = GenerateDebugData();
+	writer.Write(std::string_view(debugData));
+}
+
 std::vector<ResourceKey> Base::SortedDebugDataKeys() const
 {
 	const auto keys = std::views::keys(m_debugDataEntries);
