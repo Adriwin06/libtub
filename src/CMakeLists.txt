@@ -111,6 +111,26 @@ function(configure_libtub_library target_name)
     endif()
 endfunction()
 
+# Copies the DLLs a libtub executable needs into its output directory. libtub links yaml-cpp by file,
+# which hides it from $<TARGET_RUNTIME_DLLS>, so the function appends yaml-cpp's DLL itself.
+function(libtub_copy_runtime_dlls target_name)
+    if(NOT WIN32 OR NOT BUILD_SHARED_LIBS)
+        return()
+    endif()
+
+    set(runtime_dlls $<TARGET_RUNTIME_DLLS:${target_name}>)
+    if(TARGET yaml-cpp)
+        list(APPEND runtime_dlls $<TARGET_FILE:yaml-cpp>)
+    elseif(TARGET yaml-cpp::yaml-cpp)
+        list(APPEND runtime_dlls $<TARGET_FILE:yaml-cpp::yaml-cpp>)
+    endif()
+
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${runtime_dlls} $<TARGET_FILE_DIR:${target_name}>
+        COMMAND_EXPAND_LISTS
+    )
+endfunction()
+
 add_library(libtub_core ${LIBTUB_CORE_SOURCES})
 configure_libtub_library(libtub_core)
 set_target_properties(libtub_core PROPERTIES OUTPUT_NAME "libtub_core"
